@@ -86,6 +86,30 @@
       until: pg_ready.rc == 0
       changed_when: false
 
+     - name: Ensure database schema exists
+      command: docker exec -i billing-db psql -U {{ db_user }} -d {{ db_name }}
+      args:
+        stdin: |
+          CREATE TABLE IF NOT EXISTS users (
+              id SERIAL PRIMARY KEY,
+              name VARCHAR(255) UNIQUE NOT NULL,
+              password_hash VARCHAR(255) NOT NULL
+          );
+
+          CREATE TABLE IF NOT EXISTS expenses (
+              id SERIAL PRIMARY KEY,
+              user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+              title VARCHAR(255) NOT NULL,
+              amount NUMERIC(10,2) NOT NULL,
+              entity VARCHAR(255),
+              description TEXT,
+              due_date DATE,
+              status VARCHAR(50) DEFAULT 'pending',
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          );
+      changed_when: false
+
 
     # -------------------------------------------------------------------------
     # Backend
