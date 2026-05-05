@@ -86,18 +86,6 @@
       until: pg_ready.rc == 0
       changed_when: false
 
-    - name: Copy database init script
-      copy:
-        src: ../backend/init.sql
-        dest: "{{ app_dir }}/init.sql"
-        mode: "0644"
-      ignore_errors: yes
-
-    - name: Ensure database schema exists
-      command: docker exec -i billing-db psql -U {{ db_user }} -d {{ db_name }}
-      args:
-        stdin: "{{ lookup('file', '../backend/init.sql') }}"
-      ignore_errors: yes
 
     # -------------------------------------------------------------------------
     # Backend
@@ -117,13 +105,13 @@
         restart_policy: unless-stopped
         recreate: yes
         env:
-          PORT: "{{ backend_port }}"
-          DB_HOST: "{{ db_host }}"
-          DB_PORT: "{{ db_port }}"
-          DB_NAME: "{{ db_name }}"
-          DB_USER: "{{ db_user }}"
-          DB_PASSWORD: "{{ db_password }}"
-          JWT_SECRET: "{{ jwt_secret }}"
+          PORT: "{{ backend_port | string }}"
+          DB_HOST: "{{ db_host | string }}"
+          DB_PORT: "{{ db_port | string }}"
+          DB_NAME: "{{ db_name | string }}"
+          DB_USER: "{{ db_user | string }}"
+          DB_PASSWORD: "{{ db_password | string }}"
+          JWT_SECRET: "{{ jwt_secret | string }}"
           JWT_EXPIRES_IN: "24h"
         published_ports:
           - "{{ backend_port }}:{{ backend_port }}"
@@ -149,7 +137,7 @@
         recreate: yes
         env:
           BACKEND_HOST: "billing-backend"
-          BACKEND_PORT: "{{ backend_port }}"
+          BACKEND_PORT: "{{ backend_port | string }}"
         published_ports:
           - "{{ app_port }}:80"
         networks:
