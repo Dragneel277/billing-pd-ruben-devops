@@ -60,6 +60,24 @@ pipeline {
                 }
             }
         }
+        stage('Smoke Test') {
+    steps {
+        sh '''
+        TEST_USER="ci_test_${BUILD_NUMBER}"
+
+        echo "Testing register..."
+        curl -f -X POST http://localhost:3000/auth/register \
+          -H "Content-Type: application/json" \
+          -d "{\"name\":\"${TEST_USER}\",\"password\":\"123456\"}"
+
+        echo "Testing login..."
+        curl -f -X POST http://localhost:3000/auth/login \
+          -H "Content-Type: application/json" \
+          -d "{\"name\":\"${TEST_USER}\",\"password\":\"123456\"}"
+        '''
+    }
+}
+
     }
 
     post {
