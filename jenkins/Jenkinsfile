@@ -2,13 +2,11 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_BACKEND   = "billing-backend"
-        IMAGE_FRONTEND  = "billing-frontend"
-        // Imagens publicadas em: ricardodrisec/billing-backend e ricardodrisec/billing-frontend
+        DOCKERHUB_USER = 'dragneel277'
+        APP_PORT = '3001'
     }
 
     stages {
-
         stage('Checkout') {
             steps {
                 checkout scm
@@ -17,8 +15,8 @@ pipeline {
 
         stage('Build images') {
             steps {
-                sh "docker build -t ${IMAGE_BACKEND}:${BUILD_NUMBER} ./backend"
-                sh "docker build -t ${IMAGE_FRONTEND}:${BUILD_NUMBER} ./frontend"
+                sh "docker build -t billing-backend:${BUILD_NUMBER} ./backend"
+                sh "docker build -t billing-frontend:${BUILD_NUMBER} ./frontend"
             }
         }
 
@@ -26,20 +24,20 @@ pipeline {
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: 'dockerhub-creds',
-                    usernameVariable: 'DOCKERHUB_USER',
+                    usernameVariable: 'DOCKERHUB_USER_CRED',
                     passwordVariable: 'DOCKERHUB_PASS'
                 )]) {
-                    sh 'docker login -u $DOCKERHUB_USER -p $DOCKERHUB_PASS'
+                    sh 'echo "$DOCKERHUB_PASS" | docker login -u "$DOCKERHUB_USER_CRED" --password-stdin'
 
-                    sh "docker tag ${IMAGE_BACKEND}:${BUILD_NUMBER} ${DOCKERHUB_USER}/${IMAGE_BACKEND}:${BUILD_NUMBER}"
-                    sh "docker push ${DOCKERHUB_USER}/${IMAGE_BACKEND}:${BUILD_NUMBER}"
-                    sh "docker tag ${IMAGE_BACKEND}:${BUILD_NUMBER} ${DOCKERHUB_USER}/${IMAGE_BACKEND}:latest"
-                    sh "docker push ${DOCKERHUB_USER}/${IMAGE_BACKEND}:latest"
+                    sh "docker tag billing-backend:${BUILD_NUMBER} ${DOCKERHUB_USER}/billing-backend:${BUILD_NUMBER}"
+                    sh "docker push ${DOCKERHUB_USER}/billing-backend:${BUILD_NUMBER}"
+                    sh "docker tag billing-backend:${BUILD_NUMBER} ${DOCKERHUB_USER}/billing-backend:latest"
+                    sh "docker push ${DOCKERHUB_USER}/billing-backend:latest"
 
-                    sh "docker tag ${IMAGE_FRONTEND}:${BUILD_NUMBER} ${DOCKERHUB_USER}/${IMAGE_FRONTEND}:${BUILD_NUMBER}"
-                    sh "docker push ${DOCKERHUB_USER}/${IMAGE_FRONTEND}:${BUILD_NUMBER}"
-                    sh "docker tag ${IMAGE_FRONTEND}:${BUILD_NUMBER} ${DOCKERHUB_USER}/${IMAGE_FRONTEND}:latest"
-                    sh "docker push ${DOCKERHUB_USER}/${IMAGE_FRONTEND}:latest"
+                    sh "docker tag billing-frontend:${BUILD_NUMBER} ${DOCKERHUB_USER}/billing-frontend:${BUILD_NUMBER}"
+                    sh "docker push ${DOCKERHUB_USER}/billing-frontend:${BUILD_NUMBER}"
+                    sh "docker tag billing-frontend:${BUILD_NUMBER} ${DOCKERHUB_USER}/billing-frontend:latest"
+                    sh "docker push ${DOCKERHUB_USER}/billing-frontend:latest"
                 }
             }
         }
@@ -47,53 +45,27 @@ pipeline {
         stage('Deploy via Ansible') {
             steps {
                 withCredentials([
-                    usernamePassword(
-                        credentialsId: 'dockerhub-creds',
-                        usernameVariable: 'DOCKERHUB_USER',
-                        passwordVariable: 'DOCKERHUB_PASS'
-                    ),
                     string(credentialsId: 'db-password', variable: 'DB_PASS'),
-                    string(credentialsId: 'jwt-secret',  variable: 'JWT_SEC')
+                    string(credentialsId: 'jwt-secret', variable: 'JWT_SEC')
                 ]) {
-                    sh '''
-                        ansible-playbook -i ansible/inventory.ini ansible/playbook.yml \
-                            --extra-vars "image_tag=$BUILD_NUMBER" \
-                            --extra-vars "dockerhub_user=$DOCKERHUB_USER" \
-                            --extra-vars "db_password=$DB_PASS" \
-                            --extra-vars "jwt_secret=$JWT_SEC"
-                    '''
+                    sh """
+                    ansible-playbook -i ansible/inventory.ini ansible/playbook.yml \
+                    --extra-vars image_tag=${BUILD_NUMBER} \
+                    --extra-vars dockerhub_user=${DOCKERHUB_USER} \
+                    --extra-vars db_password=${DB_PASS} \
+                    --extra-vars jwt_secret=${JWT_SEC} \
+                    --extra-vars app_port=${APP_PORT} \
+                    --extra-vars db_host=billing-db
+                    """
                 }
             }
         }
-
     }
 
     post {
-        success {
-            script {
-                try {
-                    mail(
-                        to: 'a2022147797@isec.pt',
-                        subject: "[billing-app] Build #${BUILD_NUMBER} — SUCESSO",
-                        body: "Pipeline concluída com sucesso.\nDeploy efectuado.\nBuild: ${BUILD_URL}"
-                    )
-                } catch(e) { echo "Email skipped: ${e.message}" }
-            }
-        }
-        failure {
-            script {
-                try {
-                    mail(
-                        to: 'a2022147797@isec.pt',
-                        subject: "[billing-app] Build #${BUILD_NUMBER} — FALHOU",
-                        body: "A pipeline falhou. Verifica os logs em:\n${BUILD_URL}console"
-                    )
-                } catch(e) { echo "Email skipped: ${e.message}" }
-            }
-        }
         always {
-            sh "docker rmi ${IMAGE_BACKEND}:${BUILD_NUMBER} || true"
-            sh "docker rmi ${IMAGE_FRONTEND}:${BUILD_NUMBER} || true"
+            sh "docker rmi billing-backend:${BUILD_NUMBER} || true"
+            sh "docker rmi billing-frontend:${BUILD_NUMBER} || true"
         }
     }
 }
