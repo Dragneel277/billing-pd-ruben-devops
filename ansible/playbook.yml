@@ -1,0 +1,175 @@
+---
+
+# =============================================================================
+# Play 1 — Base de dados (PostgreSQL)
+# =============================================================================
+- name: Deploy DB
+  hosts: db_servers
+  become: true
+
+  tasks:
+
+    - name: Instalar Docker e Python pip
+      apt:
+        name:
+          - docker.io
+          - python3-pip
+        state: present
+        update_cache: yes
+
+    - name: Instalar SDK Python para Docker
+      pip:
+        name: docker
+        state: present
+        extra_args: --break-system-packages
+
+    - name: Garantir que o serviço Docker está activo
+      service:
+        name: docker
+        state: started
+        enabled: yes
+      ignore_errors: yes
+
+    - name: Criar directório da app
+      file:
+        path: "{{ app_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Copiar init.sql para o servidor
+      copy:
+        src: ../backend/src/db/init.sql
+        dest: "{{ app_dir }}/init.sql"
+        mode: "0644"
+
+    - name: Container DB
+      community.docker.docker_container:
+        name: billing-db
+        image: postgres:16-alpine
+        state: started
+        recreate: true
+        restart_policy: unless-stopped
+        env:
+          POSTGRES_DB:       "{{ db_name }}"
+          POSTGRES_USER:     "{{ db_user }}"
+          POSTGRES_PASSWORD: "{{ db_password }}"
+        volumes:
+          - "billing_pgdata:/var/lib/postgresql/data"
+        ports:
+          - "{{ db_port }}:5432"
+
+    - name: Aguardar DB ficar pronto
+      command: docker exec billing-db pg_isready -U {{ db_user }} -d {{ db_name }}
+      register: pg_ready
+      until: pg_ready.rc == 0
+      retries: 10
+      delay: 3
+
+    - name: Garantir que o schema existe
+      shell: "docker exec -i billing-db psql -U {{ db_user }} -d {{ db_name }} < {{ app_dir }}/init.sql"
+
+
+# =============================================================================
+# Play 2 — Backend (Node.js/Express)
+# =============================================================================
+- name: Deploy Backend
+  hosts: backend_servers
+  become: true
+
+  tasks:
+
+    - name: Instalar Docker e Python pip
+      apt:
+        name:
+          - docker.io
+          - python3-pip
+        state: present
+        update_cache: yes
+
+    - name: Instalar SDK Python para Docker
+      pip:
+        name: docker
+        state: present
+        extra_args: --break-system-packages
+
+    - name: Garantir que o serviço Docker está activo
+      service:
+        name: docker
+        state: started
+        enabled: yes
+      ignore_errors: yes
+
+    - name: Pull imagem backend do Docker Hub
+      community.docker.docker_image:
+        name: "{{ dockerhub_user }}/billing-backend:{{ image_tag }}"
+        source: pull
+        force_source: yes
+
+    - name: Container Backend
+      community.docker.docker_container:
+        name: billing-backend
+        image: "{{ dockerhub_user }}/billing-backend:{{ image_tag }}"
+        state: started
+        recreate: true
+        restart_policy: unless-stopped
+        env:
+          PORT:           "{{ backend_port }}"
+          DB_HOST:        "{{ db_host }}"
+          DB_PORT:        "{{ db_port }}"
+          DB_NAME:        "{{ db_name }}"
+          DB_USER:        "{{ db_user }}"
+          DB_PASSWORD:    "{{ db_password }}"
+          JWT_SECRET:     "{{ jwt_secret }}"
+          JWT_EXPIRES_IN: "24h"
+        ports:
+          - "{{ backend_port }}:{{ backend_port }}"
+
+
+# =============================================================================
+# Play 3 — Frontend (React + nginx)
+# =============================================================================
+- name: Deploy Frontend
+  hosts: frontend_servers
+  become: true
+
+  tasks:
+
+    - name: Instalar Docker e Python pip
+      apt:
+        name:
+          - docker.io
+          - python3-pip
+        state: present
+        update_cache: yes
+
+    - name: Instalar SDK Python para Docker
+      pip:
+        name: docker
+        state: present
+        extra_args: --break-system-packages
+
+    - name: Garantir que o serviço Docker está activo
+      service:
+        name: docker
+        state: started
+        enabled: yes
+      ignore_errors: yes
+
+    - name: Pull imagem frontend do Docker Hub
+      community.docker.docker_image:
+        name: "{{ dockerhub_user }}/billing-frontend:{{ image_tag }}"
+        source: pull
+        force_source: yes
+
+    - name: Container Frontend
+      community.docker.docker_container:
+        name: billing-frontend
+        image: "{{ dockerhub_user }}/billing-frontend:{{ image_tag }}"
+        state: started
+        recreate: true
+        restart_policy: unless-stopped
+        env:
+          BACKEND_HOST: "{{ backend_host }}"
+          BACKEND_PORT: "{{ backend_port }}"
+        ports:
+          - "{{ app_port }}:80"
