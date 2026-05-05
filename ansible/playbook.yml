@@ -86,7 +86,7 @@
       until: pg_ready.rc == 0
       changed_when: false
 
-     - name: Ensure database schema exists
+    - name: Ensure database schema exists
       command: docker exec -i billing-db psql -U {{ db_user }} -d {{ db_name }}
       args:
         stdin: |
