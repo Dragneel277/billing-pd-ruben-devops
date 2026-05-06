@@ -3,7 +3,11 @@ pipeline {
 
     environment {
         DOCKERHUB_USER = 'dragneel277'
-        APP_PORT = '3001'
+        APP_PORT = '80'
+        DB_HOST = '192.168.1.243'
+        APP_VM_HOST = '192.168.1.245'
+        BACKEND_URL = 'http://192.168.1.245:3000'
+        FRONTEND_URL = 'http://192.168.1.245'
     }
 
     stages {
@@ -42,39 +46,40 @@ pipeline {
             }
         }
 
-        stage('Deploy via Ansible') {
+        stage('Deploy via Ansible to VMs') {
             steps {
                 withCredentials([
                     string(credentialsId: 'db-password', variable: 'DB_PASS'),
                     string(credentialsId: 'jwt-secret', variable: 'JWT_SEC')
                 ]) {
-                    sh """
+                    sh '''
                     ansible-playbook -i ansible/inventory.ini ansible/playbook.yml \
                     --extra-vars image_tag=${BUILD_NUMBER} \
                     --extra-vars dockerhub_user=${DOCKERHUB_USER} \
                     --extra-vars db_password=${DB_PASS} \
                     --extra-vars jwt_secret=${JWT_SEC} \
                     --extra-vars app_port=${APP_PORT} \
-                    --extra-vars db_host=billing-db
-                    """
+                    --extra-vars db_host=${DB_HOST}
+                    '''
                 }
             }
         }
 
-        stage('Smoke Test') {
+        stage('Smoke Test Multi-VM') {
             steps {
                 sh '''
                 TEST_USER="ci_test_${BUILD_NUMBER}"
 
-                echo "Testing register..."
-                docker run --rm --network billing-net curlimages/curl:latest \
-                  -f -X POST http://billing-backend:3000/auth/register \
+                echo "Testing frontend..."
+                curl -f ${FRONTEND_URL}
+
+                echo "Testing register on backend VM..."
+                curl -f -X POST ${BACKEND_URL}/auth/register \
                   -H "Content-Type: application/json" \
                   -d "{\\"name\\":\\"${TEST_USER}\\",\\"password\\":\\"123456\\"}"
 
-                echo "Testing login..."
-                docker run --rm --network billing-net curlimages/curl:latest \
-                  -f -X POST http://billing-backend:3000/auth/login \
+                echo "Testing login on backend VM..."
+                curl -f -X POST ${BACKEND_URL}/auth/login \
                   -H "Content-Type: application/json" \
                   -d "{\\"name\\":\\"${TEST_USER}\\",\\"password\\":\\"123456\\"}"
                 '''
