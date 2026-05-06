@@ -88,6 +88,45 @@ pipeline {
     }
 
     post {
+        success {
+            mail(
+                to: 'rubenkiler@gmail.com',
+                subject: "SUCCESS: Billing Pipeline #${BUILD_NUMBER}",
+                body: """
+Pipeline executada com sucesso.
+
+Projeto: ${JOB_NAME}
+Build: #${BUILD_NUMBER}
+
+Aplicação:
+http://192.168.1.245/login
+
+Jenkins:
+http://localhost:8080/job/${JOB_NAME}/${BUILD_NUMBER}/
+
+Status: SUCCESS
+"""
+            )
+        }
+
+        failure {
+            mail(
+                to: 'rubenkiler@gmail.com',
+                subject: "FAILURE: Billing Pipeline #${BUILD_NUMBER}",
+                body: """
+Pipeline falhou.
+
+Projeto: ${JOB_NAME}
+Build: #${BUILD_NUMBER}
+
+Ver logs:
+http://localhost:8080/job/${JOB_NAME}/${BUILD_NUMBER}/console
+
+Status: FAILURE
+"""
+            )
+        }
+
         always {
             sh "docker rmi billing-backend:${BUILD_NUMBER} || true"
             sh "docker rmi billing-frontend:${BUILD_NUMBER} || true"
