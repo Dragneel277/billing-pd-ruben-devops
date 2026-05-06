@@ -1,36 +1,24 @@
 ---
 # =============================================================================
-# Deploy Billing App with Docker + Ansible
-# Works for local WSL/Jenkins deployment
+# Multi-VM deployment for Billing App
+# db-vm  -> PostgreSQL
+# app-vm -> Backend + Frontend
 # =============================================================================
 
-- name: Deploy Billing Application
-  hosts: all
+# -----------------------------------------------------------------------------
+# Play 1 — Database VM
+# -----------------------------------------------------------------------------
+- name: Deploy PostgreSQL database
+  hosts: db_servers
   become: yes
 
   vars:
-    app_dir: /opt/billing-app
-
-    db_name: billing_db
-    db_user: billing_user
+    db_name: "{{ db_name | default('billing_db') }}"
+    db_user: "{{ db_user | default('billing_user') }}"
     db_password: "{{ db_password | default('billing_pass') }}"
-    db_host: billing-db
-    db_port: 5432
-
-    backend_port: 3000
-    app_port: "{{ app_port | default('3001') }}"
-
-    docker_network: billing-net
-    dockerhub_user: "{{ dockerhub_user | default('dragneel277') }}"
-    image_tag: "{{ image_tag | default('latest') }}"
-
-    jwt_secret: "{{ jwt_secret | default('mysecret123') }}"
+    db_port: "{{ db_port | default('5432') }}"
 
   tasks:
-    # -------------------------------------------------------------------------
-    # Base setup
-    # -------------------------------------------------------------------------
-
     - name: Install Docker and Python dependencies
       apt:
         name:
@@ -38,29 +26,12 @@
           - python3-pip
         state: present
         update_cache: yes
-      ignore_errors: yes
 
     - name: Install Python Docker SDK
       pip:
         name: docker
         state: present
         extra_args: --break-system-packages
-      ignore_errors: yes
-
-    - name: Create application directory
-      file:
-        path: "{{ app_dir }}"
-        state: directory
-        mode: "0755"
-
-    - name: Create Docker network
-      community.docker.docker_network:
-        name: "{{ docker_network }}"
-        state: present
-
-    # -------------------------------------------------------------------------
-    # Database
-    # -------------------------------------------------------------------------
 
     - name: Run PostgreSQL container
       community.docker.docker_container:
@@ -70,13 +41,11 @@
         restart_policy: unless-stopped
         recreate: yes
         env:
-          POSTGRES_DB: "{{ db_name }}"
-          POSTGRES_USER: "{{ db_user }}"
-          POSTGRES_PASSWORD: "{{ db_password }}"
+          POSTGRES_DB: "{{ db_name | string }}"
+          POSTGRES_USER: "{{ db_user | string }}"
+          POSTGRES_PASSWORD: "{{ db_password | string }}"
         published_ports:
-          - "{{ db_port }}:5432"
-        networks:
-          - name: "{{ docker_network }}"
+          - "{{ db_port | string }}:5432"
 
     - name: Wait for PostgreSQL to be ready
       command: docker exec billing-db pg_isready -U {{ db_user }} -d {{ db_name }}
@@ -111,9 +80,38 @@
       changed_when: false
 
 
-    # -------------------------------------------------------------------------
-    # Backend
-    # -------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# Play 2 — Backend VM
+# -----------------------------------------------------------------------------
+- name: Deploy backend
+  hosts: backend_servers
+  become: yes
+
+  vars:
+    dockerhub_user: "{{ dockerhub_user | default('dragneel277') }}"
+    image_tag: "{{ image_tag | default('latest') }}"
+    backend_port: "{{ backend_port | default('3000') }}"
+    db_host: "{{ db_host }}"
+    db_port: "{{ db_port | default('5432') }}"
+    db_name: "{{ db_name | default('billing_db') }}"
+    db_user: "{{ db_user | default('billing_user') }}"
+    db_password: "{{ db_password | default('billing_pass') }}"
+    jwt_secret: "{{ jwt_secret | default('mysecret123') }}"
+
+  tasks:
+    - name: Install Docker and Python dependencies
+      apt:
+        name:
+          - docker.io
+          - python3-pip
+        state: present
+        update_cache: yes
+
+    - name: Install Python Docker SDK
+      pip:
+        name: docker
+        state: present
+        extra_args: --break-system-packages
 
     - name: Pull backend image from Docker Hub
       community.docker.docker_image:
@@ -138,13 +136,53 @@
           JWT_SECRET: "{{ jwt_secret | string }}"
           JWT_EXPIRES_IN: "24h"
         published_ports:
-          - "{{ backend_port }}:{{ backend_port }}"
-        networks:
-          - name: "{{ docker_network }}"
+          - "{{ backend_port | string }}:{{ backend_port | string }}"
 
-    # -------------------------------------------------------------------------
-    # Frontend
-    # -------------------------------------------------------------------------
+    - name: Wait for backend to respond
+      uri:
+        url: "http://localhost:{{ backend_port }}/auth/login"
+        method: POST
+        body_format: json
+        body:
+          name: "healthcheck"
+          password: "healthcheck"
+        status_code:
+          - 401
+          - 500
+      register: backend_health
+      retries: 10
+      delay: 3
+      until: backend_health.status in [401, 500]
+
+
+# -----------------------------------------------------------------------------
+# Play 3 — Frontend VM
+# -----------------------------------------------------------------------------
+- name: Deploy frontend
+  hosts: frontend_servers
+  become: yes
+
+  vars:
+    dockerhub_user: "{{ dockerhub_user | default('dragneel277') }}"
+    image_tag: "{{ image_tag | default('latest') }}"
+    app_port: "{{ app_port | default('3001') }}"
+    backend_port: "{{ backend_port | default('3000') }}"
+    backend_host: "{{ groups['backend_servers'][0] }}"
+
+  tasks:
+    - name: Install Docker and Python dependencies
+      apt:
+        name:
+          - docker.io
+          - python3-pip
+        state: present
+        update_cache: yes
+
+    - name: Install Python Docker SDK
+      pip:
+        name: docker
+        state: present
+        extra_args: --break-system-packages
 
     - name: Pull frontend image from Docker Hub
       community.docker.docker_image:
@@ -160,18 +198,22 @@
         restart_policy: unless-stopped
         recreate: yes
         env:
-          BACKEND_HOST: "billing-backend"
+          BACKEND_HOST: "{{ hostvars[backend_host].ansible_host }}"
           BACKEND_PORT: "{{ backend_port | string }}"
         published_ports:
-          - "{{ app_port }}:80"
-        networks:
-          - name: "{{ docker_network }}"
+          - "{{ app_port | string }}:80"
 
-    # -------------------------------------------------------------------------
-    # Validation
-    # -------------------------------------------------------------------------
+    - name: Wait for frontend to respond
+      uri:
+        url: "http://localhost:{{ app_port }}"
+        method: GET
+        status_code: 200
+      register: frontend_health
+      retries: 10
+      delay: 3
+      until: frontend_health.status == 200
 
-    - name: Show running containers
+    - name: Show running containers on app VM
       command: docker ps
       register: running_containers
       changed_when: false
