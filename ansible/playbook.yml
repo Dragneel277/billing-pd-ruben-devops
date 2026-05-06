@@ -13,10 +13,10 @@
   become: yes
 
   vars:
-    db_name: "{{ db_name | default('billing_db') }}"
-    db_user: "{{ db_user | default('billing_user') }}"
-    db_password: "{{ db_password | default('billing_pass') }}"
-    db_port: "{{ db_port | default('5432') }}"
+    database_name: "{{ db_name | default('billing_db') }}"
+    database_user: "{{ db_user | default('billing_user') }}"
+    database_password: "{{ db_password | default('billing_pass') }}"
+    database_port: "{{ db_port | default('5432') }}"
 
   tasks:
     - name: Install Docker and Python dependencies
@@ -41,14 +41,14 @@
         restart_policy: unless-stopped
         recreate: yes
         env:
-          POSTGRES_DB: "{{ db_name | string }}"
-          POSTGRES_USER: "{{ db_user | string }}"
-          POSTGRES_PASSWORD: "{{ db_password | string }}"
+          POSTGRES_DB: "{{ database_name | string }}"
+          POSTGRES_USER: "{{ database_user | string }}"
+          POSTGRES_PASSWORD: "{{ database_password | string }}"
         published_ports:
-          - "{{ db_port | string }}:5432"
+          - "{{ database_port | string }}:5432"
 
     - name: Wait for PostgreSQL to be ready
-      command: docker exec billing-db pg_isready -U {{ db_user }} -d {{ db_name }}
+      command: docker exec billing-db pg_isready -U {{ database_user }} -d {{ database_name }}
       register: pg_ready
       retries: 15
       delay: 3
@@ -56,7 +56,7 @@
       changed_when: false
 
     - name: Ensure database schema exists
-      command: docker exec -i billing-db psql -U {{ db_user }} -d {{ db_name }}
+      command: docker exec -i billing-db psql -U {{ database_user }} -d {{ database_name }}
       args:
         stdin: |
           CREATE TABLE IF NOT EXISTS users (
@@ -88,15 +88,15 @@
   become: yes
 
   vars:
-    dockerhub_user: "{{ dockerhub_user | default('dragneel277') }}"
-    image_tag: "{{ image_tag | default('latest') }}"
-    backend_port: "{{ backend_port | default('3000') }}"
-    db_host: "{{ db_host }}"
-    db_port: "{{ db_port | default('5432') }}"
-    db_name: "{{ db_name | default('billing_db') }}"
-    db_user: "{{ db_user | default('billing_user') }}"
-    db_password: "{{ db_password | default('billing_pass') }}"
-    jwt_secret: "{{ jwt_secret | default('mysecret123') }}"
+    backend_image_user: "{{ dockerhub_user | default('dragneel277') }}"
+    backend_image_tag: "{{ image_tag | default('latest') }}"
+    backend_container_port: "{{ backend_port | default('3000') }}"
+    backend_db_host: "{{ db_host }}"
+    backend_db_port: "{{ db_port | default('5432') }}"
+    backend_db_name: "{{ db_name | default('billing_db') }}"
+    backend_db_user: "{{ db_user | default('billing_user') }}"
+    backend_db_password: "{{ db_password | default('billing_pass') }}"
+    backend_jwt_secret: "{{ jwt_secret | default('mysecret123') }}"
 
   tasks:
     - name: Install Docker and Python dependencies
@@ -115,32 +115,32 @@
 
     - name: Pull backend image from Docker Hub
       community.docker.docker_image:
-        name: "{{ dockerhub_user }}/billing-backend:{{ image_tag }}"
+        name: "{{ backend_image_user }}/billing-backend:{{ backend_image_tag }}"
         source: pull
         force_source: yes
 
     - name: Run backend container
       community.docker.docker_container:
         name: billing-backend
-        image: "{{ dockerhub_user }}/billing-backend:{{ image_tag }}"
+        image: "{{ backend_image_user }}/billing-backend:{{ backend_image_tag }}"
         state: started
         restart_policy: unless-stopped
         recreate: yes
         env:
-          PORT: "{{ backend_port | string }}"
-          DB_HOST: "{{ db_host | string }}"
-          DB_PORT: "{{ db_port | string }}"
-          DB_NAME: "{{ db_name | string }}"
-          DB_USER: "{{ db_user | string }}"
-          DB_PASSWORD: "{{ db_password | string }}"
-          JWT_SECRET: "{{ jwt_secret | string }}"
+          PORT: "{{ backend_container_port | string }}"
+          DB_HOST: "{{ backend_db_host | string }}"
+          DB_PORT: "{{ backend_db_port | string }}"
+          DB_NAME: "{{ backend_db_name | string }}"
+          DB_USER: "{{ backend_db_user | string }}"
+          DB_PASSWORD: "{{ backend_db_password | string }}"
+          JWT_SECRET: "{{ backend_jwt_secret | string }}"
           JWT_EXPIRES_IN: "24h"
         published_ports:
-          - "{{ backend_port | string }}:{{ backend_port | string }}"
+          - "{{ backend_container_port | string }}:{{ backend_container_port | string }}"
 
     - name: Wait for backend to respond
       uri:
-        url: "http://localhost:{{ backend_port }}/auth/login"
+        url: "http://localhost:{{ backend_container_port }}/auth/login"
         method: POST
         body_format: json
         body:
@@ -163,11 +163,11 @@
   become: yes
 
   vars:
-    dockerhub_user: "{{ dockerhub_user | default('dragneel277') }}"
-    image_tag: "{{ image_tag | default('latest') }}"
-    app_port: "{{ app_port | default('3001') }}"
-    backend_port: "{{ backend_port | default('3000') }}"
-    backend_host: "{{ groups['backend_servers'][0] }}"
+    frontend_image_user: "{{ dockerhub_user | default('dragneel277') }}"
+    frontend_image_tag: "{{ image_tag | default('latest') }}"
+    frontend_port: "{{ app_port | default('3001') }}"
+    frontend_backend_port: "{{ backend_port | default('3000') }}"
+    backend_host_name: "{{ groups['backend_servers'][0] }}"
 
   tasks:
     - name: Install Docker and Python dependencies
@@ -186,26 +186,26 @@
 
     - name: Pull frontend image from Docker Hub
       community.docker.docker_image:
-        name: "{{ dockerhub_user }}/billing-frontend:{{ image_tag }}"
+        name: "{{ frontend_image_user }}/billing-frontend:{{ frontend_image_tag }}"
         source: pull
         force_source: yes
 
     - name: Run frontend container
       community.docker.docker_container:
         name: billing-frontend
-        image: "{{ dockerhub_user }}/billing-frontend:{{ image_tag }}"
+        image: "{{ frontend_image_user }}/billing-frontend:{{ frontend_image_tag }}"
         state: started
         restart_policy: unless-stopped
         recreate: yes
         env:
-          BACKEND_HOST: "{{ hostvars[backend_host].ansible_host }}"
-          BACKEND_PORT: "{{ backend_port | string }}"
+          BACKEND_HOST: "{{ hostvars[backend_host_name].ansible_host }}"
+          BACKEND_PORT: "{{ frontend_backend_port | string }}"
         published_ports:
-          - "{{ app_port | string }}:80"
+          - "{{ frontend_port | string }}:80"
 
     - name: Wait for frontend to respond
       uri:
-        url: "http://localhost:{{ app_port }}"
+        url: "http://localhost:{{ frontend_port }}"
         method: GET
         status_code: 200
       register: frontend_health
