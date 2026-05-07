@@ -1,4 +1,32 @@
-# BILLING PROJECT - FULL RECOVERY AND STARTUP GUIDE
+# BILLING PROJECT - FINAL RECOVERY AND STARTUP GUIDE
+
+# IMPORTANT
+
+This project uses the WSL distribution:
+
+```powershell
+wsl -d JenkinsWSL
+```
+
+DO NOT use:
+
+```powershell
+wsl -d Ubuntu
+```
+
+DO NOT use:
+
+```text
+docker-desktop
+```
+
+All Docker containers, Jenkins data and project infrastructure are inside:
+
+```text
+JenkinsWSL
+```
+
+---
 
 # VM Shutdown Before Sleeping
 
@@ -15,7 +43,7 @@ Do NOT use:
 - Desligar a máquina
 - Guardar o estado da máquina
 
-The correct option is:
+Correct option:
 
 ```text
 Enviar pedido para desligar
@@ -39,7 +67,7 @@ ruben
 
 ---
 
-# STEP 1 — Open WSL
+# STEP 1 — Open Correct WSL
 
 Open:
 
@@ -49,8 +77,8 @@ Windows Terminal
 
 Then execute:
 
-```bash
-wsl -d ubuntu
+```powershell
+wsl -d JenkinsWSL
 ```
 
 Expected:
@@ -59,17 +87,40 @@ Expected:
 ruben@RubenBentosa:~
 ```
 
-If WSL does not open:
+Verify current distro:
 
-```powershell
-wsl --install
+```bash
+pwd
 ```
-
-Then restart Windows.
 
 ---
 
-# STEP 2 — Start Virtual Machines
+# STEP 2 — Open Project Folder
+
+```bash
+cd "/mnt/c/Users/ruben/Desktop/ISEC/2 Semestre/PD/billing-pd-ruben-devops"
+```
+
+Verify files:
+
+```bash
+ls
+```
+
+Expected:
+
+```text
+ansible
+backend
+frontend
+jenkins
+README.md
+guide.md
+```
+
+---
+
+# STEP 3 — Start Virtual Machines
 
 Open:
 
@@ -77,7 +128,7 @@ Open:
 Oracle VirtualBox
 ```
 
-Start the VMs in this order:
+Start in this order:
 
 ## 1. billing-db-vm
 
@@ -101,23 +152,23 @@ password: 12345
 
 ---
 
-# STEP 3 — Verify VM IP Addresses
+# STEP 4 — Verify VM IP Addresses
 
-Inside EACH VM run:
+Inside EACH VM:
 
 ```bash
 ip a
 ```
 
-Expected IPs:
+Expected:
 
-## billing-db-vm
+## DB VM
 
 ```text
 192.168.1.243
 ```
 
-## billing-app-vm
+## APP VM
 
 ```text
 192.168.1.245
@@ -147,60 +198,54 @@ app-vm ansible_host=NEW_IP ansible_user=ruben
 
 ---
 
-# STEP 4 — Open Project Folder
+# STEP 5 — Verify Docker
 
-Inside WSL:
-
-```bash
-cd "/mnt/c/Users/ruben/Desktop/ISEC/2 Semestre/PD/billing-pd-ruben-devops"
-```
-
-Verify files:
+Inside JenkinsWSL:
 
 ```bash
-ls
+docker ps
 ```
 
-Expected:
+Expected containers:
 
 ```text
-ansible
-backend
-frontend
-jenkins
-README.md
+billing-frontend
+billing-backend
+billing-db
 ```
 
 ---
 
-# STEP 5 — Verify Docker
+# QUICK FIX — If Containers Are Missing
 
-Run:
+Show all containers:
 
 ```bash
-docker ps
+docker ps -a
 ```
 
-If Docker gives error:
+Start manually:
 
 ```bash
-sudo systemctl start docker
-```
-
-Then:
-
-```bash
-docker ps
+docker start billing-db
+docker start billing-backend
+docker start billing-frontend
 ```
 
 ---
 
 # STEP 6 — Start Jenkins
 
-Check existing containers:
+Verify Jenkins exists:
 
 ```bash
 docker ps -a
+```
+
+Expected:
+
+```text
+jenkins
 ```
 
 Start Jenkins:
@@ -221,7 +266,7 @@ Expected:
 jenkins
 ```
 
-with ports:
+with:
 
 ```text
 0.0.0.0:8080->8080
@@ -229,7 +274,38 @@ with ports:
 
 ---
 
-# STEP 7 — Open Jenkins
+# STEP 7 — FIX JENKINS DOCKER PERMISSION
+
+IMPORTANT:
+
+After reboot, Jenkins usually loses Docker socket permission.
+
+Run:
+
+```bash
+docker exec -u root -it jenkins bash
+```
+
+Inside container:
+
+```bash
+chmod 666 /var/run/docker.sock
+exit
+```
+
+Verify Docker works INSIDE Jenkins:
+
+```bash
+docker exec -it jenkins docker ps
+```
+
+Expected:
+- list of containers appears
+- no permission denied error
+
+---
+
+# STEP 8 — Open Jenkins
 
 Open browser:
 
@@ -237,52 +313,28 @@ Open browser:
 http://localhost:8080
 ```
 
----
+Expected:
+- old Jenkins dashboard
+- billing-pipeline
+- previous builds
+- email config
+- credentials
 
-# QUICK FIX — If Jenkins Does Not Open
+# Jenkins Login
 
-Restart container:
+If Jenkins asks for login credentials:
 
-```bash
-docker restart jenkins
-```
-
-Check logs:
-
-```bash
-docker logs jenkins
-```
-
----
-
-# STEP 8 — Verify Application Containers
-
-Run:
-
-```bash
-docker ps
-```
-
-Expected containers:
+## Username
 
 ```text
-billing-db
-billing-backend
-billing-frontend
+Ruben
 ```
 
----
+## Password
 
-# QUICK FIX — If Containers Are Stopped
-
-Start manually:
-
-```bash
-docker start billing-db
-docker start billing-backend
-docker start billing-frontend
+```text
+Ruben12345
 ```
-
 ---
 
 # STEP 9 — Verify Frontend
@@ -298,7 +350,17 @@ If login page appears:
 
 ---
 
-# STEP 10 — Verify SSH Connectivity
+# STEP 10 — Verify Backend
+
+Open:
+
+```text
+http://192.168.1.245:3000
+```
+
+---
+
+# STEP 11 — Verify SSH Connectivity
 
 Test DB VM:
 
@@ -354,7 +416,31 @@ Password:
 
 ---
 
-# STEP 11 — Verify Ansible
+# QUICK FIX — If Host Key Verification Failed
+
+Run:
+
+```bash
+ssh-keygen -R 192.168.1.243
+ssh-keygen -R 192.168.1.245
+```
+
+Reconnect:
+
+```bash
+ssh ruben@192.168.1.243
+ssh ruben@192.168.1.245
+```
+
+Answer:
+
+```text
+yes
+```
+
+---
+
+# STEP 12 — Verify Ansible
 
 Run:
 
@@ -371,31 +457,7 @@ db-vm | SUCCESS
 
 ---
 
-# QUICK FIX — If Host Key Verification Failed
-
-Run:
-
-```bash
-ssh-keygen -R 192.168.1.243
-ssh-keygen -R 192.168.1.245
-```
-
-Then reconnect:
-
-```bash
-ssh ruben@192.168.1.243
-ssh ruben@192.168.1.245
-```
-
-Answer:
-
-```text
-yes
-```
-
----
-
-# STEP 12 — Run Manual Deployment
+# STEP 13 — Run Manual Deployment
 
 ```bash
 ansible-playbook -i ansible/inventory.ini ansible/playbook.yml \
@@ -407,7 +469,7 @@ ansible-playbook -i ansible/inventory.ini ansible/playbook.yml \
 
 ---
 
-# STEP 13 — Open Jenkins Pipeline
+# STEP 14 — Open Jenkins Pipeline
 
 Open:
 
@@ -443,9 +505,9 @@ SUCCESS
 
 ---
 
-# STEP 14 — Verify Email Notification
+# STEP 15 — Verify Email Notification
 
-Check Gmail inbox:
+Check:
 
 ```text
 rubenkiler@gmail.com
@@ -467,10 +529,10 @@ FAILURE: Billing Pipeline #...
 
 # USEFUL COMMANDS
 
-## Open WSL
+## Open correct WSL
 
-```bash
-wsl
+```powershell
+wsl -d JenkinsWSL
 ```
 
 ---
@@ -483,7 +545,7 @@ cd "/mnt/c/Users/ruben/Desktop/ISEC/2 Semestre/PD/billing-pd-ruben-devops"
 
 ---
 
-## Show containers
+## Show running containers
 
 ```bash
 docker ps
@@ -593,6 +655,16 @@ sudo systemctl start docker
 
 ---
 
+# Jenkins missing Docker permission
+
+```bash
+docker exec -u root -it jenkins bash
+chmod 666 /var/run/docker.sock
+exit
+```
+
+---
+
 # Jenkins container missing
 
 Recreate:
@@ -605,18 +677,6 @@ docker run -d \
   -v jenkins_home:/var/jenkins_home \
   -v /var/run/docker.sock:/var/run/docker.sock \
   jenkins/jenkins:lts
-```
-
----
-
-# Jenkins cannot use Docker
-
-Fix permissions:
-
-```bash
-docker exec -u 0 -it jenkins bash
-chmod 666 /var/run/docker.sock
-exit
 ```
 
 ---
