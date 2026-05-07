@@ -20,7 +20,7 @@ DO NOT use:
 docker-desktop
 ```
 
-All Docker containers, Jenkins data and project infrastructure are inside:
+All Docker containers, Jenkins data, Jenkins pipeline configuration, Docker volumes and project infrastructure are inside:
 
 ```text
 JenkinsWSL
@@ -28,7 +28,247 @@ JenkinsWSL
 
 ---
 
-# VM Shutdown Before Sleeping
+# PROJECT EXPORT FILES
+
+The complete backup/export package should contain:
+
+```text
+billing-app-vm.ova
+billing-db-vm.ova
+JenkinsWSL.tar
+```
+
+These files allow another person to recreate most of the working environment.
+
+---
+
+# PROJECT REPOSITORY
+
+GitHub repository:
+
+```text
+https://github.com/Dragneel277/billing-pd-ruben-devops.git
+```
+
+Main working branch:
+
+```text
+ruben-devops-fixes
+```
+
+---
+
+# FINAL NETWORK ARCHITECTURE
+
+The final working network uses two adapters per VM:
+
+1. NAT Network  
+2. Host-only Adapter  
+
+## Final IP addresses
+
+| Machine | NAT Network IP | Host-only IP |
+|---|---|---|
+| billing-app-vm | 10.0.2.3 | 192.168.56.101 |
+| billing-db-vm | 10.0.2.4 | 192.168.56.102 |
+
+## Purpose of each network
+
+| Purpose | Correct IP |
+|---|---|
+| Jenkins/Ansible to app VM | 192.168.56.101 |
+| Jenkins/Ansible to db VM | 192.168.56.102 |
+| backend container to PostgreSQL/db VM | 10.0.2.4 |
+| app VM internal NAT address | 10.0.2.3 |
+
+IMPORTANT:
+
+The Jenkins pipeline smoke tests must use:
+
+```text
+192.168.56.101
+```
+
+The backend database host must use:
+
+```text
+10.0.2.4
+```
+
+---
+
+# FINAL WORKING URLS
+
+## Frontend
+
+```text
+http://192.168.56.101/login
+```
+
+## Backend API
+
+```text
+http://192.168.56.101:3000
+```
+
+## Jenkins
+
+```text
+http://localhost:8080
+```
+
+---
+
+# EXPORTING THE PROJECT
+
+# STEP A — Export VirtualBox VMs
+
+Open:
+
+```text
+Oracle VirtualBox
+```
+
+For each VM:
+
+```text
+billing-app-vm
+billing-db-vm
+```
+
+Do:
+
+```text
+File → Export Appliance
+```
+
+Export each VM as:
+
+```text
+billing-app-vm.ova
+billing-db-vm.ova
+```
+
+Recommended:
+- shutdown the VM before exporting
+- do not export while the VM is suspended
+- do not export while the VM is running
+
+---
+
+# STEP B — Export JenkinsWSL
+
+Open PowerShell as normal user or administrator.
+
+First shutdown WSL:
+
+```powershell
+wsl --shutdown
+```
+
+Then export:
+
+```powershell
+wsl --export JenkinsWSL JenkinsWSL.tar
+```
+
+Expected output file:
+
+```text
+JenkinsWSL.tar
+```
+
+This file contains:
+- Jenkins container
+- Jenkins jobs
+- Jenkins credentials
+- Jenkins volume
+- Docker state
+- Docker containers
+- Jenkins pipeline configuration
+- Ansible environment
+
+---
+
+# IMPORTING THE PROJECT ON ANOTHER COMPUTER
+
+# STEP 0 — Install Required Software
+
+The other computer should have:
+
+- Oracle VirtualBox
+- WSL enabled
+- Docker available inside JenkinsWSL after import
+- Git
+- Windows Terminal
+
+---
+
+# STEP 0.1 — Import JenkinsWSL
+
+Place this file somewhere accessible:
+
+```text
+JenkinsWSL.tar
+```
+
+Open PowerShell and run:
+
+```powershell
+wsl --import JenkinsWSL C:\WSL\JenkinsWSL .\JenkinsWSL.tar
+```
+
+Verify:
+
+```powershell
+wsl -l -v
+```
+
+Expected:
+
+```text
+JenkinsWSL
+```
+
+Open it:
+
+```powershell
+wsl -d JenkinsWSL
+```
+
+---
+
+# STEP 0.2 — Import Virtual Machines
+
+Open:
+
+```text
+Oracle VirtualBox
+```
+
+Go to:
+
+```text
+File → Import Appliance
+```
+
+Import:
+
+```text
+billing-app-vm.ova
+billing-db-vm.ova
+```
+
+After importing, verify that both VMs exist:
+
+```text
+billing-app-vm
+billing-db-vm
+```
+
+---
+
+# VM SHUTDOWN BEFORE SLEEPING
 
 Always shutdown the VMs correctly.
 
@@ -51,7 +291,7 @@ Enviar pedido para desligar
 
 ---
 
-# VM Credentials
+# VM CREDENTIALS
 
 ## Username
 
@@ -118,6 +358,15 @@ README.md
 guide.md
 ```
 
+If the folder does not exist, clone the repository:
+
+```bash
+cd "/mnt/c/Users/ruben/Desktop/ISEC/2 Semestre/PD"
+git clone https://github.com/Dragneel277/billing-pd-ruben-devops.git
+cd billing-pd-ruben-devops
+git checkout ruben-devops-fixes
+```
+
 ---
 
 # STEP 3 — Start Virtual Machines
@@ -139,8 +388,6 @@ user: ruben
 password: 12345
 ```
 
----
-
 ## 2. billing-app-vm
 
 Login:
@@ -160,18 +407,26 @@ Inside EACH VM:
 ip a
 ```
 
+or:
+
+```bash
+hostname -I
+```
+
 Expected:
 
 ## DB VM
 
 ```text
-192.168.1.243
+NAT: 10.0.2.4
+HOST-ONLY: 192.168.56.102
 ```
 
 ## APP VM
 
 ```text
-192.168.1.245
+NAT: 10.0.2.3
+HOST-ONLY: 192.168.56.101
 ```
 
 ---
@@ -184,16 +439,27 @@ Update:
 ansible/inventory.ini
 ```
 
-Replace old IPs with new ones.
+The inventory should use Host-only IPs, not NAT IPs.
 
-Example:
+Correct example:
 
 ```ini
 [db_servers]
-db-vm ansible_host=NEW_IP ansible_user=ruben
+db-vm ansible_host=192.168.56.102 ansible_user=ruben
 
 [backend_servers]
-app-vm ansible_host=NEW_IP ansible_user=ruben
+app-vm ansible_host=192.168.56.101 ansible_user=ruben
+```
+
+IMPORTANT:
+
+Do not use `10.0.2.x` in Ansible inventory.
+
+Ansible/Jenkins must access the VMs through Host-only IPs:
+
+```text
+192.168.56.101
+192.168.56.102
 ```
 
 ---
@@ -206,13 +472,16 @@ Inside JenkinsWSL:
 docker ps
 ```
 
-Expected containers:
+Expected containers may include:
 
 ```text
+jenkins
 billing-frontend
 billing-backend
 billing-db
 ```
+
+If only Jenkins is running, that is also acceptable before deployment.
 
 ---
 
@@ -224,7 +493,7 @@ Show all containers:
 docker ps -a
 ```
 
-Start manually:
+Start manually if needed:
 
 ```bash
 docker start billing-db
@@ -320,6 +589,8 @@ Expected:
 - email config
 - credentials
 
+---
+
 # Jenkins Login
 
 If Jenkins asks for login credentials:
@@ -335,6 +606,7 @@ Ruben
 ```text
 Ruben12345
 ```
+
 ---
 
 # STEP 9 — Verify Frontend
@@ -342,7 +614,7 @@ Ruben12345
 Open:
 
 ```text
-http://192.168.1.245/login
+http://192.168.56.101/login
 ```
 
 If login page appears:
@@ -352,10 +624,27 @@ If login page appears:
 
 # STEP 10 — Verify Backend
 
-Open:
+Run:
+
+```bash
+curl http://192.168.56.101:3000
+```
+
+Expected result:
 
 ```text
-http://192.168.1.245:3000
+404 Not Found
+```
+
+IMPORTANT:
+
+This is expected because the backend does not expose a root route `/`.
+
+The backend is still working if the API endpoints work, for example:
+
+```text
+/auth/register
+/auth/login
 ```
 
 ---
@@ -365,7 +654,7 @@ http://192.168.1.245:3000
 Test DB VM:
 
 ```bash
-ssh ruben@192.168.1.243
+ssh ruben@192.168.56.102
 ```
 
 Then:
@@ -377,13 +666,19 @@ exit
 Test APP VM:
 
 ```bash
-ssh ruben@192.168.1.245
+ssh ruben@192.168.56.101
 ```
 
 Then:
 
 ```bash
 exit
+```
+
+Password if asked:
+
+```text
+12345
 ```
 
 ---
@@ -396,16 +691,16 @@ Generate SSH key:
 ssh-keygen
 ```
 
-Copy SSH key:
+Copy SSH key to DB VM:
 
 ```bash
-ssh-copy-id ruben@192.168.1.243
+ssh-copy-id ruben@192.168.56.102
 ```
 
-and:
+Copy SSH key to APP VM:
 
 ```bash
-ssh-copy-id ruben@192.168.1.245
+ssh-copy-id ruben@192.168.56.101
 ```
 
 Password:
@@ -418,18 +713,25 @@ Password:
 
 # QUICK FIX — If Host Key Verification Failed
 
-Run:
+This can happen after changing IPs, reimporting VMs, or recreating network adapters.
+
+Inside JenkinsWSL:
 
 ```bash
-ssh-keygen -R 192.168.1.243
-ssh-keygen -R 192.168.1.245
+docker exec -it jenkins bash
 ```
 
-Reconnect:
+Inside Jenkins container:
 
 ```bash
-ssh ruben@192.168.1.243
-ssh ruben@192.168.1.245
+ssh-keygen -R 192.168.56.101
+ssh-keygen -R 192.168.56.102
+```
+
+Reconnect manually:
+
+```bash
+ssh ruben@192.168.56.101
 ```
 
 Answer:
@@ -438,11 +740,41 @@ Answer:
 yes
 ```
 
+Exit:
+
+```bash
+exit
+```
+
+Then test DB:
+
+```bash
+ssh ruben@192.168.56.102
+```
+
+Answer:
+
+```text
+yes
+```
+
+Exit:
+
+```bash
+exit
+```
+
+Exit Jenkins container:
+
+```bash
+exit
+```
+
 ---
 
 # STEP 12 — Verify Ansible
 
-Run:
+Run inside the project folder:
 
 ```bash
 ansible -i ansible/inventory.ini all -m ping
@@ -455,17 +787,37 @@ app-vm | SUCCESS
 db-vm | SUCCESS
 ```
 
+If Ansible fails with SSH timeout:
+- verify VMs are running
+- verify Host-only adapter is enabled
+- verify IPs are correct
+- verify inventory uses `192.168.56.x`
+
 ---
 
 # STEP 13 — Run Manual Deployment
+
+Run inside the project folder:
 
 ```bash
 ansible-playbook -i ansible/inventory.ini ansible/playbook.yml \
 --extra-vars image_tag=latest \
 --extra-vars dockerhub_user=dragneel277 \
 --extra-vars db_password=billing_pass \
---extra-vars jwt_secret=mysecret123
+--extra-vars jwt_secret=mysecret123 \
+--extra-vars app_port=80 \
+--extra-vars db_host=10.0.2.4
 ```
+
+IMPORTANT:
+
+The database host must be:
+
+```text
+10.0.2.4
+```
+
+because the backend communicates with the database through the NAT Network.
 
 ---
 
@@ -491,15 +843,38 @@ Build Now
 
 ---
 
-# Expected Pipeline Flow
+# EXPECTED PIPELINE FLOW
 
 ```text
 Checkout
 Build images
 Push to Docker Hub
-Deploy via Ansible
+Deploy via Ansible to VMs
 Smoke Test Multi-VM
 Email Notification
+SUCCESS
+```
+
+---
+
+# EXPECTED FINAL RESULT
+
+Successful pipeline should:
+
+- checkout the GitHub repository
+- build backend Docker image
+- build frontend Docker image
+- push backend image to Docker Hub
+- push frontend image to Docker Hub
+- deploy PostgreSQL container on db-vm
+- deploy backend container on app-vm
+- deploy frontend container on app-vm
+- run smoke tests through Host-only IP
+- send success email notification
+
+Expected Jenkins status:
+
+```text
 SUCCESS
 ```
 
@@ -527,6 +902,34 @@ FAILURE: Billing Pipeline #...
 
 ---
 
+# JENKINSFILE NETWORK VALUES
+
+The Jenkinsfile should use:
+
+```groovy
+DB_HOST = '10.0.2.4'
+APP_VM_HOST = '192.168.56.101'
+BACKEND_URL = 'http://192.168.56.101:3000'
+FRONTEND_URL = 'http://192.168.56.101'
+```
+
+Explanation:
+
+```text
+DB_HOST = 10.0.2.4
+```
+
+Used by backend to connect to PostgreSQL.
+
+```text
+FRONTEND_URL = 192.168.56.101
+BACKEND_URL = 192.168.56.101:3000
+```
+
+Used by Jenkins smoke tests.
+
+---
+
 # USEFUL COMMANDS
 
 ## Open correct WSL
@@ -537,10 +940,34 @@ wsl -d JenkinsWSL
 
 ---
 
+## Shutdown WSL
+
+```powershell
+wsl --shutdown
+```
+
+---
+
 ## Go to project
 
 ```bash
 cd "/mnt/c/Users/ruben/Desktop/ISEC/2 Semestre/PD/billing-pd-ruben-devops"
+```
+
+---
+
+## Check branch
+
+```bash
+git branch
+```
+
+---
+
+## Pull latest changes
+
+```bash
+git pull
 ```
 
 ---
@@ -585,6 +1012,14 @@ docker logs jenkins
 
 ---
 
+## Jenkins logs live
+
+```bash
+docker logs -f jenkins
+```
+
+---
+
 ## Start application containers
 
 ```bash
@@ -608,7 +1043,7 @@ docker restart billing-frontend
 ## Verify frontend
 
 ```text
-http://192.168.1.245/login
+http://192.168.56.101/login
 ```
 
 ---
@@ -621,11 +1056,19 @@ http://localhost:8080
 
 ---
 
-## Verify backend
+## Verify backend API
+
+```bash
+curl http://192.168.56.101:3000
+```
+
+Expected:
 
 ```text
-http://192.168.1.245:3000
+404 Not Found
 ```
+
+This is normal because `/` is not an API route.
 
 ---
 
@@ -645,9 +1088,19 @@ ansible -i ansible/inventory.ini all -m shell -a "docker ps"
 
 ---
 
+## Verify VM IPs through Ansible
+
+```bash
+ansible -i ansible/inventory.ini all -m shell -a "hostname -I"
+```
+
+---
+
 # COMMON QUICK FIXES
 
 # Docker daemon not running
+
+Inside the relevant Linux environment:
 
 ```bash
 sudo systemctl start docker
@@ -679,11 +1132,15 @@ docker run -d \
   jenkins/jenkins:lts
 ```
 
+IMPORTANT:
+
+If the original Jenkins volume exists, this should recover the old Jenkins configuration.
+
 ---
 
 # Ansible sudo error
 
-Inside VM:
+Inside each VM:
 
 ```bash
 sudo visudo
@@ -697,23 +1154,208 @@ ruben ALL=(ALL) NOPASSWD:ALL
 
 ---
 
-# Final Architecture
+# SSH timeout from Jenkins to VM
+
+Check:
+- VM is running
+- Host-only adapter is enabled
+- IP is correct
+- inventory uses Host-only IP
+- SSH server is running inside VM
+
+Inside VM:
+
+```bash
+sudo systemctl status ssh
+```
+
+If SSH is stopped:
+
+```bash
+sudo systemctl start ssh
+```
+
+Enable SSH at boot:
+
+```bash
+sudo systemctl enable ssh
+```
+
+---
+
+# Host key verification failed
+
+Inside Jenkins container:
+
+```bash
+docker exec -it jenkins bash
+ssh-keygen -R 192.168.56.101
+ssh-keygen -R 192.168.56.102
+ssh ruben@192.168.56.101
+ssh ruben@192.168.56.102
+exit
+```
+
+---
+
+# Frontend not loading
+
+Check container on app VM:
+
+```bash
+ssh ruben@192.168.56.101
+docker ps
+docker logs billing-frontend
+exit
+```
+
+Restart container:
+
+```bash
+ssh ruben@192.168.56.101
+docker restart billing-frontend
+exit
+```
+
+---
+
+# Backend not responding
+
+Check backend on app VM:
+
+```bash
+ssh ruben@192.168.56.101
+docker ps
+docker logs billing-backend
+exit
+```
+
+Restart backend:
+
+```bash
+ssh ruben@192.168.56.101
+docker restart billing-backend
+exit
+```
+
+---
+
+# Database not responding
+
+Check PostgreSQL on db VM:
+
+```bash
+ssh ruben@192.168.56.102
+docker ps
+docker logs billing-db
+exit
+```
+
+Restart database:
+
+```bash
+ssh ruben@192.168.56.102
+docker restart billing-db
+exit
+```
+
+---
+
+# Docker Hub login problem
+
+Inside Jenkins pipeline this uses Jenkins credentials:
 
 ```text
-GitHub
+dockerhub-creds
+```
+
+If login fails, verify in Jenkins:
+
+```text
+Manage Jenkins → Credentials
+```
+
+Expected credential:
+
+```text
+dockerhub-creds
+```
+
+---
+
+# Jenkins DB password and JWT secret
+
+The pipeline uses these Jenkins credentials:
+
+```text
+db-password
+jwt-secret
+```
+
+If missing, create them in:
+
+```text
+Manage Jenkins → Credentials
+```
+
+---
+
+# FINAL ARCHITECTURE
+
+```text
+GitHub Repository
    ↓
-Jenkins
+Jenkins Pipeline
    ↓
 Docker Build
    ↓
-Docker Hub
+Docker Hub Push
    ↓
-Ansible
+Ansible Deployment
    ↓
-db-vm → PostgreSQL
-app-vm → Backend + Frontend
+billing-db-vm → PostgreSQL
+billing-app-vm → Backend + Frontend
    ↓
 Smoke Tests
    ↓
 Email Notifications
 ```
+
+---
+
+# FINAL CHECKLIST BEFORE PRESENTATION OR HANDOFF
+
+Before giving the project to another person, verify:
+
+- [ ] `billing-app-vm.ova` exported
+- [ ] `billing-db-vm.ova` exported
+- [ ] `JenkinsWSL.tar` exported
+- [ ] GitHub repository updated
+- [ ] Jenkinsfile committed and pushed
+- [ ] `ansible/inventory.ini` uses Host-only IPs
+- [ ] Jenkins opens at `http://localhost:8080`
+- [ ] frontend opens at `http://192.168.56.101/login`
+- [ ] Ansible ping works
+- [ ] Jenkins pipeline finishes with `SUCCESS`
+- [ ] Docker Hub images are visible
+- [ ] success email notification is received
+
+---
+
+# FINAL NOTES
+
+The most important rule is:
+
+```text
+Use Host-only IPs for Jenkins and Ansible.
+Use NAT IPs for internal VM-to-VM communication.
+```
+
+Therefore:
+
+```text
+Jenkins/Ansible → 192.168.56.101 and 192.168.56.102
+Backend → PostgreSQL → 10.0.2.4
+```
+
+This configuration is the final working version of the project.
