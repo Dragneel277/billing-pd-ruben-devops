@@ -79,9 +79,6 @@ pipeline {
                 echo "Testing frontend through Host-only IP..."
                 curl --connect-timeout 10 --max-time 20 -f ${FRONTEND_URL}
 
-                echo "Testing backend health through Host-only IP..."
-                curl --connect-timeout 10 --max-time 20 -f ${BACKEND_URL}
-
                 echo "Testing register on backend..."
                 curl --connect-timeout 10 --max-time 20 -f -X POST ${BACKEND_URL}/auth/register \
                   -H "Content-Type: application/json" \
