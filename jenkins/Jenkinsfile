@@ -4,10 +4,10 @@ pipeline {
     environment {
         DOCKERHUB_USER = 'dragneel277'
         APP_PORT = '80'
-        DB_HOST = '192.168.1.243'
-        APP_VM_HOST = '192.168.1.245'
-        BACKEND_URL = 'http://192.168.1.245:3000'
-        FRONTEND_URL = 'http://192.168.1.245'
+        DB_HOST = '10.0.2.4'
+        APP_VM_HOST = '10.0.2.3'
+        BACKEND_URL = 'http://10.0.2.3:3000'
+        FRONTEND_URL = 'http://10.0.2.3'
     }
 
     stages {
@@ -99,7 +99,7 @@ Projeto: ${JOB_NAME}
 Build: #${BUILD_NUMBER}
 
 Aplicação:
-http://192.168.1.245/login
+http://10.0.2.3/login
 
 Jenkins:
 http://localhost:8080/job/${JOB_NAME}/${BUILD_NUMBER}/
