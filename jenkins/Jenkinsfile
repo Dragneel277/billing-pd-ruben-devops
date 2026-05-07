@@ -3,11 +3,17 @@ pipeline {
 
     environment {
         DOCKERHUB_USER = 'dragneel277'
+
         APP_PORT = '80'
+
+        // IP interno entre VMs: backend -> database
         DB_HOST = '10.0.2.4'
-        APP_VM_HOST = '10.0.2.3'
-        BACKEND_URL = 'http://10.0.2.3:3000'
-        FRONTEND_URL = 'http://10.0.2.3'
+
+        // IP Host-only: Jenkins/WSL -> app VM
+        APP_VM_HOST = '192.168.56.101'
+
+        BACKEND_URL = 'http://192.168.56.101:3000'
+        FRONTEND_URL = 'http://192.168.56.101'
     }
 
     stages {
@@ -70,16 +76,19 @@ pipeline {
                 sh '''
                 TEST_USER="ci_test_${BUILD_NUMBER}"
 
-                echo "Testing frontend..."
-                curl -f ${FRONTEND_URL}
+                echo "Testing frontend through Host-only IP..."
+                curl --connect-timeout 10 --max-time 20 -f ${FRONTEND_URL}
 
-                echo "Testing register on backend VM..."
-                curl -f -X POST ${BACKEND_URL}/auth/register \
+                echo "Testing backend health through Host-only IP..."
+                curl --connect-timeout 10 --max-time 20 -f ${BACKEND_URL}
+
+                echo "Testing register on backend..."
+                curl --connect-timeout 10 --max-time 20 -f -X POST ${BACKEND_URL}/auth/register \
                   -H "Content-Type: application/json" \
                   -d "{\\"name\\":\\"${TEST_USER}\\",\\"password\\":\\"123456\\"}"
 
-                echo "Testing login on backend VM..."
-                curl -f -X POST ${BACKEND_URL}/auth/login \
+                echo "Testing login on backend..."
+                curl --connect-timeout 10 --max-time 20 -f -X POST ${BACKEND_URL}/auth/login \
                   -H "Content-Type: application/json" \
                   -d "{\\"name\\":\\"${TEST_USER}\\",\\"password\\":\\"123456\\"}"
                 '''
@@ -99,7 +108,10 @@ Projeto: ${JOB_NAME}
 Build: #${BUILD_NUMBER}
 
 Aplicação:
-http://10.0.2.3/login
+http://192.168.56.101/login
+
+Backend:
+http://192.168.56.101:3000
 
 Jenkins:
 http://localhost:8080/job/${JOB_NAME}/${BUILD_NUMBER}/
