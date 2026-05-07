@@ -50,7 +50,7 @@ Windows Terminal
 Then execute:
 
 ```bash
-wsl
+wsl -d ubuntu
 ```
 
 Expected:
