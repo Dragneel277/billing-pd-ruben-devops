@@ -79,9 +79,10 @@ router.get('/', async (req, res) => {
     )
 
     return res.json(result.rows.map(applyDynamicStatus))
-  } catch {
-    return res.status(500).json({ error: 'Internal server error' })
-  }
+ } catch (err) {
+  console.error('Expense route error:', err)
+  return res.status(500).json({ error: 'Internal server error' })
+}
 })
 
 router.post('/', async (req, res) => {
@@ -186,13 +187,15 @@ router.patch('/:id', async (req, res) => {
     )
 
     return res.json(applyDynamicStatus(result.rows[0]))
-  } catch (err) {
-    if (err.code === '23514') {
-      return res.status(400).json({ error: 'Invalid status value' })
-    }
+} catch (err) {
+  console.error('Expense route error:', err)
 
-    return res.status(500).json({ error: 'Internal server error' })
+  if (err.code === '23514') {
+    return res.status(400).json({ error: 'Invalid status value' })
   }
+
+  return res.status(500).json({ error: 'Internal server error' })
+}
 })
 
 router.delete('/:id', async (req, res) => {
