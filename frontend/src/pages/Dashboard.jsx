@@ -4,6 +4,7 @@ import api from '../api/client'
 import ExpenseList from '../components/ExpenseList'
 import ExpenseForm from '../components/ExpenseForm'
 import ExpenseFilters from '../components/ExpenseFilters'
+import AnalyticsDashboard from '../components/AnalyticsDashboard'
 
 export default function Dashboard() {
   const [expenses, setExpenses] = useState([])
@@ -58,6 +59,7 @@ const [filters, setFilters] = useState({ status: '', category: '', search: '', f
         </div>
       </div>
 
+      <AnalyticsDashboard />
       <ExpenseForm onCreated={fetchExpenses} />
       <ExpenseFilters filters={filters} onChange={setFilters} />
       <ExpenseList expenses={expenses} onRefresh={fetchExpenses} />
