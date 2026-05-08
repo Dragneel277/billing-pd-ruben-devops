@@ -8,22 +8,33 @@ import AnalyticsDashboard from '../components/AnalyticsDashboard'
 
 export default function Dashboard() {
   const [expenses, setExpenses] = useState([])
-const [filters, setFilters] = useState({ status: '', category: '', search: '', from: '', to: '' })
-  const navigate                = useNavigate()
-  const user                    = JSON.parse(localStorage.getItem('user') || '{}')
+  const [filters, setFilters] = useState({
+    status: '',
+    category: '',
+    search: '',
+    from: '',
+    to: ''
+  })
+
+  const navigate = useNavigate()
+  const user = JSON.parse(localStorage.getItem('user') || '{}')
 
   const fetchExpenses = useCallback(async () => {
     const params = {}
+
     if (filters.status) params.status = filters.status
-    if (filters.from)   params.from   = filters.from
-    if (filters.to)     params.to     = filters.to
     if (filters.category) params.category = filters.category
-    if (filters.search)   params.search   = filters.search
+    if (filters.search) params.search = filters.search
+    if (filters.from) params.from = filters.from
+    if (filters.to) params.to = filters.to
+
     const { data } = await api.get('/expenses', { params })
     setExpenses(data)
   }, [filters])
 
-  useEffect(() => { fetchExpenses() }, [fetchExpenses])
+  useEffect(() => {
+    fetchExpenses()
+  }, [fetchExpenses])
 
   const handleLogout = () => {
     localStorage.removeItem('token')
@@ -31,48 +42,172 @@ const [filters, setFilters] = useState({ status: '', category: '', search: '', f
     navigate('/login')
   }
 
-  const totalPending = expenses.filter(e => e.status === 'pending').reduce((s, e) => s + parseFloat(e.amount), 0)
-  const totalPaid    = expenses.filter(e => e.status === 'paid').reduce((s, e) => s + parseFloat(e.amount), 0)
+  const totalPending = expenses
+    .filter(e => e.status === 'pending')
+    .reduce((s, e) => s + parseFloat(e.amount), 0)
+
+  const totalPaid = expenses
+    .filter(e => e.status === 'paid')
+    .reduce((s, e) => s + parseFloat(e.amount), 0)
+
+  const totalOverdue = expenses
+    .filter(e => e.status === 'overdue')
+    .reduce((s, e) => s + parseFloat(e.amount), 0)
+
+  const totalCancelled = expenses
+    .filter(e => e.status === 'cancelled')
+    .reduce((s, e) => s + parseFloat(e.amount), 0)
 
   return (
-    <div style={styles.page}>
-      <header style={styles.header}>
-        <h2 style={{ margin: 0 }}>Billing Tracker</h2>
-        <span>Hello, {user.name} — <button style={styles.logoutBtn} onClick={handleLogout}>Logout</button></span>
-      </header>
+    <div style={styles.layout}>
+      <aside style={styles.sidebar}>
+        <div>
+          <h2 style={styles.logo}>Billing Pro</h2>
+          <p style={styles.sidebarText}>DevOps Billing Manager</p>
+        </div>
 
-      <div style={styles.summary}>
-        <div style={styles.summaryCard}>
-          <div style={styles.summaryLabel}>Pending</div>
-          <div style={styles.summaryAmount}>€{totalPending.toFixed(2)}</div>
-          <div>{expenses.filter(e => e.status === 'pending').length} expenses</div>
+        <div style={styles.sidebarInfo}>
+          <span style={styles.userLabel}>Logged in as</span>
+          <strong>{user.name || 'User'}</strong>
         </div>
-        <div style={{ ...styles.summaryCard, borderColor: '#52c41a' }}>
-          <div style={styles.summaryLabel}>Paid</div>
-          <div style={{ ...styles.summaryAmount, color: '#52c41a' }}>€{totalPaid.toFixed(2)}</div>
-          <div>{expenses.filter(e => e.status === 'paid').length} expenses</div>
-        </div>
-        <div style={styles.summaryCard}>
-          <div style={styles.summaryLabel}>Total</div>
-          <div style={styles.summaryAmount}>€{(totalPending + totalPaid).toFixed(2)}</div>
-          <div>{expenses.length} expenses</div>
-        </div>
-      </div>
 
-      <AnalyticsDashboard />
-      <ExpenseForm onCreated={fetchExpenses} />
-      <ExpenseFilters filters={filters} onChange={setFilters} />
-      <ExpenseList expenses={expenses} onRefresh={fetchExpenses} />
+        <button style={styles.logoutBtn} onClick={handleLogout}>
+          Logout
+        </button>
+      </aside>
+
+      <main style={styles.main}>
+        <header style={styles.header}>
+          <div>
+            <h1 style={styles.title}>Dashboard</h1>
+            <p style={styles.subtitle}>
+              Manage bills, monitor spending and analyze payment behavior.
+            </p>
+          </div>
+        </header>
+
+        <section style={styles.summary}>
+          <SummaryCard label="Pending" value={totalPending} count={expenses.filter(e => e.status === 'pending').length} color="#fa8c16" />
+          <SummaryCard label="Paid" value={totalPaid} count={expenses.filter(e => e.status === 'paid').length} color="#52c41a" />
+          <SummaryCard label="Overdue" value={totalOverdue} count={expenses.filter(e => e.status === 'overdue').length} color="#ff4d4f" />
+          <SummaryCard label="Cancelled" value={totalCancelled} count={expenses.filter(e => e.status === 'cancelled').length} color="#8c8c8c" />
+        </section>
+
+        <AnalyticsDashboard />
+
+        <section style={styles.section}>
+          <ExpenseForm onCreated={fetchExpenses} />
+          <ExpenseFilters filters={filters} onChange={setFilters} />
+          <ExpenseList expenses={expenses} onRefresh={fetchExpenses} />
+        </section>
+      </main>
+    </div>
+  )
+}
+
+function SummaryCard({ label, value, count, color }) {
+  return (
+    <div style={{ ...styles.summaryCard, borderTop: `4px solid ${color}` }}>
+      <span style={styles.summaryLabel}>{label}</span>
+      <strong style={{ ...styles.summaryAmount, color }}>
+        €{value.toFixed(2)}
+      </strong>
+      <small style={styles.summaryCount}>{count} bills</small>
     </div>
   )
 }
 
 const styles = {
-  page:          { maxWidth: '900px', margin: '0 auto', padding: '1rem' },
-  header:        { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', padding: '1rem', background: '#1677ff', color: '#fff', borderRadius: '8px' },
-  logoutBtn:     { background: 'transparent', border: '1px solid #fff', color: '#fff', padding: '0.3rem 0.8rem', cursor: 'pointer', borderRadius: '4px' },
-  summary:       { display: 'flex', gap: '1rem', marginBottom: '1.5rem' },
-  summaryCard:   { flex: 1, background: '#fff', border: '2px solid #1677ff', borderRadius: '8px', padding: '1rem', textAlign: 'center' },
-  summaryLabel:  { fontWeight: 'bold', marginBottom: '0.5rem' },
-  summaryAmount: { fontSize: '1.5rem', fontWeight: 'bold', color: '#1677ff' }
+  layout: {
+    minHeight: '100vh',
+    display: 'flex',
+    background: '#f4f7fb',
+    color: '#1f2937'
+  },
+  sidebar: {
+    width: '240px',
+    background: '#0f172a',
+    color: '#fff',
+    padding: '1.5rem',
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'space-between',
+    position: 'sticky',
+    top: 0,
+    height: '100vh',
+    boxSizing: 'border-box'
+  },
+  logo: {
+    margin: 0,
+    fontSize: '1.5rem'
+  },
+  sidebarText: {
+    color: '#cbd5e1',
+    fontSize: '0.9rem'
+  },
+  sidebarInfo: {
+    background: 'rgba(255,255,255,0.08)',
+    padding: '1rem',
+    borderRadius: '10px'
+  },
+  userLabel: {
+    display: 'block',
+    color: '#cbd5e1',
+    fontSize: '0.8rem',
+    marginBottom: '0.25rem'
+  },
+  logoutBtn: {
+    background: '#ef4444',
+    color: '#fff',
+    border: 'none',
+    padding: '0.7rem 1rem',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontWeight: 'bold'
+  },
+  main: {
+    flex: 1,
+    padding: '2rem',
+    maxWidth: '1400px',
+    margin: '0 auto'
+  },
+  header: {
+    marginBottom: '1.5rem'
+  },
+  title: {
+    margin: 0,
+    fontSize: '2rem'
+  },
+  subtitle: {
+    color: '#64748b',
+    marginTop: '0.4rem'
+  },
+  summary: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+    gap: '1rem',
+    marginBottom: '1.5rem'
+  },
+  summaryCard: {
+    background: '#fff',
+    padding: '1rem',
+    borderRadius: '12px',
+    boxShadow: '0 4px 12px rgba(15,23,42,0.08)',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.35rem'
+  },
+  summaryLabel: {
+    color: '#64748b',
+    fontSize: '0.9rem'
+  },
+  summaryAmount: {
+    fontSize: '1.6rem'
+  },
+  summaryCount: {
+    color: '#94a3b8'
+  },
+  section: {
+    marginTop: '1.5rem'
+  }
 }
