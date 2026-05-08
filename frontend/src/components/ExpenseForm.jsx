@@ -1,7 +1,15 @@
 import { useState } from 'react'
 import api from '../api/client'
 
-const empty = { title: '', amount: '', entity: '', description: '', due_date: '', status: 'pending' }
+const empty = {
+  title: '',
+  amount: '',
+  entity: '',
+  description: '',
+  due_date: '',
+  status: 'pending',
+  category: 'other'
+}
 
 export default function ExpenseForm({ onCreated }) {
   const [form, setForm]   = useState(empty)
@@ -10,6 +18,7 @@ export default function ExpenseForm({ onCreated }) {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
+
     try {
       await api.post('/expenses', { ...form, amount: parseFloat(form.amount) })
       setForm(empty)
@@ -32,18 +41,42 @@ export default function ExpenseForm({ onCreated }) {
 
   return (
     <div style={styles.card}>
-      <h3 style={{ marginTop: 0 }}>New Expense</h3>
+      <h3 style={{ marginTop: 0 }}>New Bill</h3>
+
       {error && <p style={styles.error}>{error}</p>}
+
       <form onSubmit={handleSubmit} style={styles.row}>
-        {field('title',       'Title *')}
-        {field('amount',      'Amount *', 'number')}
-        {field('entity',      'Entity')}
+        {field('title', 'Title *')}
+        {field('amount', 'Amount *', 'number')}
+        {field('entity', 'Entity')}
         {field('description', 'Description')}
-        {field('due_date',    'Due date', 'date')}
-        <select style={styles.input} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+        {field('due_date', 'Due date', 'date')}
+
+        <select
+          style={styles.input}
+          value={form.category}
+          onChange={(e) => setForm({ ...form, category: e.target.value })}
+        >
+          <option value="rent">Rent</option>
+          <option value="utilities">Utilities</option>
+          <option value="internet">Internet</option>
+          <option value="services">Services</option>
+          <option value="food">Food</option>
+          <option value="transport">Transport</option>
+          <option value="other">Other</option>
+        </select>
+
+        <select
+          style={styles.input}
+          value={form.status}
+          onChange={(e) => setForm({ ...form, status: e.target.value })}
+        >
           <option value="pending">Pending</option>
           <option value="paid">Paid</option>
+          <option value="overdue">Overdue</option>
+          <option value="cancelled">Cancelled</option>
         </select>
+
         <button style={styles.button} type="submit">Add</button>
       </form>
     </div>

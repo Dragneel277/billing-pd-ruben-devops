@@ -3,17 +3,47 @@ export default function ExpenseFilters({ filters, onChange }) {
 
   return (
     <div style={styles.card}>
-      <strong>Filters: </strong>
+      <strong>Filters:</strong>
+
+      <input
+        style={styles.input}
+        type="text"
+        placeholder="Search title, entity or description"
+        value={filters.search}
+        onChange={(e) => set('search', e.target.value)}
+      />
+
       <select style={styles.input} value={filters.status} onChange={(e) => set('status', e.target.value)}>
         <option value="">All statuses</option>
         <option value="pending">Pending</option>
         <option value="paid">Paid</option>
+        <option value="overdue">Overdue</option>
+        <option value="cancelled">Cancelled</option>
       </select>
+
+      <select style={styles.input} value={filters.category} onChange={(e) => set('category', e.target.value)}>
+        <option value="">All categories</option>
+        <option value="rent">Rent</option>
+        <option value="utilities">Utilities</option>
+        <option value="internet">Internet</option>
+        <option value="services">Services</option>
+        <option value="food">Food</option>
+        <option value="transport">Transport</option>
+        <option value="other">Other</option>
+      </select>
+
       <label style={styles.label}>From</label>
       <input style={styles.input} type="date" value={filters.from} onChange={(e) => set('from', e.target.value)} />
+
       <label style={styles.label}>To</label>
       <input style={styles.input} type="date" value={filters.to} onChange={(e) => set('to', e.target.value)} />
-      <button style={styles.clearBtn} onClick={() => onChange({ status: '', from: '', to: '' })}>Clear</button>
+
+      <button
+        style={styles.clearBtn}
+        onClick={() => onChange({ status: '', category: '', search: '', from: '', to: '' })}
+      >
+        Clear
+      </button>
     </div>
   )
 }

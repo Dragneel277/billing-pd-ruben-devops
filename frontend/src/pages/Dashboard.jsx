@@ -7,7 +7,7 @@ import ExpenseFilters from '../components/ExpenseFilters'
 
 export default function Dashboard() {
   const [expenses, setExpenses] = useState([])
-  const [filters,  setFilters]  = useState({ status: '', from: '', to: '' })
+const [filters, setFilters] = useState({ status: '', category: '', search: '', from: '', to: '' })
   const navigate                = useNavigate()
   const user                    = JSON.parse(localStorage.getItem('user') || '{}')
 
@@ -16,6 +16,8 @@ export default function Dashboard() {
     if (filters.status) params.status = filters.status
     if (filters.from)   params.from   = filters.from
     if (filters.to)     params.to     = filters.to
+    if (filters.category) params.category = filters.category
+    if (filters.search)   params.search   = filters.search
     const { data } = await api.get('/expenses', { params })
     setExpenses(data)
   }, [filters])
