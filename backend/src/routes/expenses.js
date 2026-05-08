@@ -4,7 +4,7 @@ const pool    = require('../db/client')
 const router = express.Router()
 
 router.get('/', async (req, res) => {
-  const { status, from, to } = req.query
+  const { status, category, from, to, search } = req.query
   const conditions = ['user_id = $1']
   const params     = [req.user.id]
 
@@ -12,13 +12,25 @@ router.get('/', async (req, res) => {
     params.push(status)
     conditions.push(`status = $${params.length}`)
   }
+
+  if (category) {
+    params.push(category)
+    conditions.push(`category = $${params.length}`)
+  }
+
   if (from) {
     params.push(from)
     conditions.push(`due_date >= $${params.length}`)
   }
+
   if (to) {
     params.push(to)
     conditions.push(`due_date <= $${params.length}`)
+  }
+
+  if (search) {
+    params.push(`%${search}%`)
+    conditions.push(`(title ILIKE $${params.length} OR entity ILIKE $${params.length} OR description ILIKE $${params.length})`)
   }
 
   try {
@@ -33,37 +45,52 @@ router.get('/', async (req, res) => {
 })
 
 router.post('/', async (req, res) => {
-  const { title, amount, entity, description, due_date, status } = req.body
+  const { title, amount, entity, description, due_date, status, category } = req.body
+
   if (!title || amount === undefined) {
     return res.status(400).json({ error: 'title and amount are required' })
   }
+
   try {
     const result = await pool.query(
-      `INSERT INTO expenses (user_id, title, amount, entity, description, due_date, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-      [req.user.id, title, amount, entity || null, description || null, due_date || null, status || 'pending']
+      `INSERT INTO expenses (user_id, title, amount, entity, description, due_date, status, category)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      [
+        req.user.id,
+        title,
+        amount,
+        entity || null,
+        description || null,
+        due_date || null,
+        status || 'pending',
+        category || 'other'
+      ]
     )
+
     return res.status(201).json(result.rows[0])
   } catch (err) {
     if (err.code === '23514') {
       return res.status(400).json({ error: 'Invalid status value' })
     }
+
     return res.status(500).json({ error: 'Internal server error' })
   }
 })
 
 router.patch('/:id', async (req, res) => {
   const { id } = req.params
+
   try {
     const check = await pool.query(
       'SELECT id FROM expenses WHERE id = $1 AND user_id = $2',
       [id, req.user.id]
     )
+
     if (check.rows.length === 0) {
       return res.status(404).json({ error: 'Expense not found' })
     }
 
-    const { title, amount, entity, description, due_date, status } = req.body
+    const { title, amount, entity, description, due_date, status, category } = req.body
     const fields = []
     const params = []
 
@@ -73,6 +100,7 @@ router.patch('/:id', async (req, res) => {
     if (description !== undefined) { params.push(description); fields.push(`description = $${params.length}`) }
     if (due_date    !== undefined) { params.push(due_date);    fields.push(`due_date = $${params.length}`) }
     if (status      !== undefined) { params.push(status);      fields.push(`status = $${params.length}`) }
+    if (category    !== undefined) { params.push(category);    fields.push(`category = $${params.length}`) }
 
     if (fields.length === 0) {
       return res.status(400).json({ error: 'No fields to update' })
@@ -88,25 +116,30 @@ router.patch('/:id', async (req, res) => {
        RETURNING *`,
       params
     )
+
     return res.json(result.rows[0])
   } catch (err) {
     if (err.code === '23514') {
       return res.status(400).json({ error: 'Invalid status value' })
     }
+
     return res.status(500).json({ error: 'Internal server error' })
   }
 })
 
 router.delete('/:id', async (req, res) => {
   const { id } = req.params
+
   try {
     const result = await pool.query(
       'DELETE FROM expenses WHERE id = $1 AND user_id = $2 RETURNING id',
       [id, req.user.id]
     )
+
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Expense not found' })
     }
+
     return res.json({ message: 'Expense deleted' })
   } catch {
     return res.status(500).json({ error: 'Internal server error' })
