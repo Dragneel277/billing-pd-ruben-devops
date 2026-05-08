@@ -31,7 +31,9 @@ password: 12345
 
 # 2. Open the Correct WSL
 
-Open PowerShell or Windows Terminal and run:
+Open PowerShell inside the project folder or open Windows Terminal.
+
+Run:
 
 ```powershell
 wsl -d JenkinsWSL
@@ -41,24 +43,6 @@ Expected:
 
 ```bash
 ruben@RubenBentosa:
-```
-
-Do not use:
-
-```powershell
-wsl -d Ubuntu
-```
-
-Do not use:
-
-```text
-docker-desktop
-```
-
-The correct project WSL environment is:
-
-```text
-JenkinsWSL
 ```
 
 ---
@@ -75,7 +59,7 @@ Check files:
 ls
 ```
 
-Expected main folders/files:
+Expected:
 
 ```text
 ansible
@@ -85,7 +69,6 @@ jenkins
 README.md
 guide.md
 quickstart.md
-billing-app-project.md
 ```
 
 ---
@@ -194,55 +177,6 @@ Jenkins:
 
 ```text
 http://localhost:8080
-```
-
----
-
-# 8.1 Application Features to Test
-
-After opening the frontend, test the main application features.
-
-The current version supports:
-
-- User registration and login
-- Bill creation
-- Bill editing through an edit modal
-- Bill deletion
-- Categories:
-  - Rent
-  - Utilities
-  - Internet
-  - Services
-  - Food
-  - Transport
-  - Other
-- Statuses:
-  - Pending
-  - Paid
-  - Overdue
-  - Cancelled
-- Automatic overdue detection
-- Search by title, entity or description
-- Filters by status, category and date range
-- Analytics dashboard:
-  - Monthly spending chart
-  - Yearly spending chart
-  - Spending by category
-  - Top spending days
-  - Summary cards
-
-Recommended manual test:
-
-```text
-1. Login
-2. Create a new bill
-3. Create a bill with a past due date and pending status
-4. Confirm it appears as overdue
-5. Edit a bill
-6. Change category and status
-7. Test filters
-8. Check if charts update
-9. Delete a test bill
 ```
 
 ---

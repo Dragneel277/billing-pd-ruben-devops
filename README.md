@@ -2,25 +2,23 @@
 
 ## Project Overview
 
-Billing Tracker is a full-stack web application for expense management and billing tracking.
+Billing Tracker is a full-stack billing and expense management web application deployed through a complete DevOps workflow.
 
-The project implements a complete DevOps workflow using Docker, Jenkins, Ansible, Docker Hub and multiple virtual machines.
+The project demonstrates:
 
-The application stack is composed of:
-
-- Frontend: React + Vite + Nginx
-- Backend: Node.js + Express
-- Database: PostgreSQL
-- Containers: Docker
-- CI/CD: Jenkins
-- Deployment Automation: Ansible
-- Container Registry: Docker Hub
-- Virtualization: Oracle VirtualBox
-- WSL Environment: JenkinsWSL
+- Full-stack application development
+- Docker containerization
+- Jenkins CI/CD pipeline
+- Docker Hub image registry
+- Ansible automated deployment
+- Multi-VM deployment with Oracle VirtualBox
+- PostgreSQL persistence
+- Smoke testing
+- Email notifications
 
 ---
 
-# Repository
+## Repository
 
 ```text
 https://github.com/Dragneel277/billing-pd-ruben-devops.git
@@ -34,44 +32,132 @@ ruben-devops-fixes
 
 ---
 
-# Current Infrastructure
+## Technology Stack
 
-## Virtual Machines
+| Layer | Technology |
+|---|---|
+| Frontend | React + Vite + Nginx |
+| Backend | Node.js + Express |
+| Database | PostgreSQL |
+| Containers | Docker |
+| CI/CD | Jenkins |
+| Deployment | Ansible |
+| Registry | Docker Hub |
+| Virtualization | Oracle VirtualBox |
+| WSL Environment | JenkinsWSL |
+
+---
+
+## Application Features
+
+The current application is not only a basic expense tracker. It includes a more complete billing management interface.
+
+Implemented features:
+
+- User registration and login with JWT authentication
+- Bill creation
+- Bill editing through an edit modal
+- Bill deletion
+- Search by title, entity or description
+- Filters by status, category and date range
+- Automatic overdue detection
+- Analytics dashboard
+- Summary cards
+- Monthly spending chart
+- Yearly spending chart
+- Spending by category chart
+- Top spending days chart
+
+---
+
+## Bill Fields
+
+Each bill can contain:
+
+- Title
+- Amount
+- Entity
+- Description
+- Due date
+- Category
+- Status
+
+---
+
+## Bill Categories
+
+```text
+rent
+utilities
+internet
+services
+food
+transport
+other
+```
+
+---
+
+## Bill Statuses
+
+```text
+pending
+paid
+overdue
+cancelled
+```
+
+---
+
+## Automatic Overdue Detection
+
+If a bill has:
+
+```text
+status = pending
+due_date < current date
+```
+
+the backend dynamically returns it as:
+
+```text
+overdue
+```
+
+This means the database may still store the bill as `pending`, but the application displays it as `overdue`.
+
+---
+
+## Current Infrastructure
 
 The project uses two Ubuntu virtual machines in Oracle VirtualBox.
 
 Each VM uses two network adapters:
 
-1. NAT Network  
-2. Host-only Adapter  
+1. NAT Network
+2. Host-only Adapter
 
 | VM | NAT Network IP | Host-only IP | Purpose |
 |---|---|---|---|
-| billing-db-vm | 10.0.2.4 | 192.168.56.102 | PostgreSQL Database |
 | billing-app-vm | 10.0.2.3 | 192.168.56.101 | Backend + Frontend |
+| billing-db-vm | 10.0.2.4 | 192.168.56.102 | PostgreSQL Database |
 | Jenkins Host | localhost | localhost:8080 | CI/CD Server |
 
 ---
 
-# Network Explanation
+## Network Rule
 
-The project uses different IPs for different purposes.
-
-## Host-only IPs
-
-Host-only IPs are used by Jenkins and Ansible to access the VMs through SSH.
+Host-only IPs are used by Jenkins and Ansible:
 
 ```text
 Jenkins/Ansible → billing-app-vm: 192.168.56.101
 Jenkins/Ansible → billing-db-vm: 192.168.56.102
 ```
 
-## NAT Network IPs
-
-NAT Network IPs are used for communication between the VMs.
+NAT Network IPs are used for internal VM-to-VM communication:
 
 ```text
-billing-app-vm → billing-db-vm: 10.0.2.4
+billing-app-vm backend → billing-db-vm PostgreSQL: 10.0.2.4
 ```
 
 The backend connects to PostgreSQL using:
@@ -82,21 +168,25 @@ DB_HOST=10.0.2.4
 
 ---
 
-# Application Access
+## Application Access
 
-## Frontend
+Frontend:
 
 ```text
 http://192.168.56.101/login
 ```
 
-## Backend API
+Backend API:
 
 ```text
 http://192.168.56.101:3000
 ```
 
-Important:
+Jenkins:
+
+```text
+http://localhost:8080
+```
 
 The backend root route `/` may return:
 
@@ -104,116 +194,46 @@ The backend root route `/` may return:
 404 Not Found
 ```
 
-This is expected because the backend does not expose a root route. The real API endpoints are used for authentication and application operations.
+This is expected because the backend does not expose a root route.
 
-## Jenkins
+---
+
+## VM Credentials
 
 ```text
-http://localhost:8080
+user: ruben
+password: 12345
 ```
 
 ---
 
-# VM Credentials
-
-## Username
-
-```text
-ruben
-```
-
-## Password
-
-```text
-12345
-```
-
----
-
-# Jenkins Credentials
+## Jenkins Credentials
 
 If Jenkins asks for login:
 
-## Username
-
 ```text
-Ruben
-```
-
-## Password
-
-```text
-Ruben12345
+Username: Ruben
+Password: Ruben12345
 ```
 
 ---
 
-# Implemented DevOps Features
+## Docker Hub Images
 
-## Docker
-
-The application is containerized using Docker.
-
-Main containers:
-
-- PostgreSQL container
-- Backend container
-- Frontend container
-- Jenkins container
-
-Docker is used to package each component and ensure that deployment is reproducible.
-
----
-
-# Docker Images
-
-The Jenkins pipeline automatically builds Docker images for:
+The Jenkins pipeline builds and pushes:
 
 ```text
-billing-backend
-billing-frontend
-```
-
-The images are tagged using:
-
-- Jenkins build number
-- latest
-
-Example:
-
-```text
-dragneel277/billing-backend:34
+dragneel277/billing-backend:<BUILD_NUMBER>
 dragneel277/billing-backend:latest
-dragneel277/billing-frontend:34
+dragneel277/billing-frontend:<BUILD_NUMBER>
 dragneel277/billing-frontend:latest
 ```
 
 ---
 
-# Docker Hub Integration
+## Jenkins Pipeline
 
-Docker Hub is used as the external container registry.
-
-Repositories:
-
-```text
-dragneel277/billing-backend
-dragneel277/billing-frontend
-```
-
-During pipeline execution Jenkins:
-
-1. Builds the backend image
-2. Builds the frontend image
-3. Logs into Docker Hub
-4. Tags the images
-5. Pushes the images to Docker Hub
-
----
-
-# Jenkins CI/CD Pipeline
-
-The Jenkins pipeline is stored in:
+The Jenkinsfile is located at:
 
 ```text
 jenkins/Jenkinsfile
@@ -221,22 +241,22 @@ jenkins/Jenkinsfile
 
 Pipeline stages:
 
-1. Checkout source code
+1. Checkout
 2. Build backend Docker image
 3. Build frontend Docker image
 4. Push backend image to Docker Hub
 5. Push frontend image to Docker Hub
-6. Deploy PostgreSQL to the database VM using Ansible
-7. Deploy backend to the application VM using Ansible
-8. Deploy frontend to the application VM using Ansible
-9. Execute smoke tests
+6. Deploy PostgreSQL to db-vm using Ansible
+7. Deploy backend to app-vm using Ansible
+8. Deploy frontend to app-vm using Ansible
+9. Run smoke tests
 10. Send email notification
 
 ---
 
-# Jenkinsfile Network Configuration
+## Jenkinsfile Network Configuration
 
-The final Jenkinsfile uses the following important values:
+The final Jenkinsfile should use:
 
 ```groovy
 DB_HOST = '10.0.2.4'
@@ -245,26 +265,9 @@ BACKEND_URL = 'http://192.168.56.101:3000'
 FRONTEND_URL = 'http://192.168.56.101'
 ```
 
-Explanation:
-
-```text
-DB_HOST = 10.0.2.4
-```
-
-This is used by the backend container to connect to PostgreSQL on the database VM.
-
-```text
-BACKEND_URL = http://192.168.56.101:3000
-FRONTEND_URL = http://192.168.56.101
-```
-
-These are used by Jenkins smoke tests because Jenkins reaches the app VM through the Host-only network.
-
 ---
 
-# Ansible Deployment
-
-Deployment automation is handled using Ansible.
+## Ansible Deployment
 
 Inventory file:
 
@@ -278,22 +281,13 @@ Playbook:
 ansible/playbook.yml
 ```
 
-Ansible performs:
+Ansible deploys:
 
-- Docker installation verification
-- Python Docker SDK installation
-- PostgreSQL container deployment on db-vm
-- Database schema initialization
-- Backend container deployment on app-vm
-- Frontend container deployment on app-vm
-- Container recreation when new images are available
-- Health checks after deployment
+- PostgreSQL container on `billing-db-vm`
+- Backend container on `billing-app-vm`
+- Frontend container on `billing-app-vm`
 
----
-
-# Current Inventory Configuration
-
-The inventory should use Host-only IPs.
+The inventory must use Host-only IPs:
 
 ```ini
 [db_servers]
@@ -314,22 +308,15 @@ db_user=billing_user
 db_host=10.0.2.4
 ```
 
-Important:
-
-- `ansible_host` uses Host-only IPs.
-- `db_host` uses the NAT Network IP of the database VM.
-
 ---
 
-# Jenkins Credentials Required
-
-The following Jenkins credentials are required:
+## Jenkins Credentials Required
 
 | Credential ID | Type | Purpose |
 |---|---|---|
-| dockerhub-creds | Username + Password | Docker Hub authentication |
+| dockerhub-creds | Username + Password | Docker Hub login |
 | db-password | Secret text | PostgreSQL password |
-| jwt-secret | Secret text | JWT secret |
+| jwt-secret | Secret text | JWT signing secret |
 
 Location:
 
@@ -339,41 +326,15 @@ Manage Jenkins → Credentials → System → Global credentials
 
 ---
 
-# Jenkins Email Notifications
+## Smoke Tests
 
-Jenkins is configured to send automatic email notifications for:
-
-- Successful builds
-- Failed builds
-
-SMTP configuration uses Gmail SMTP.
-
-Configuration path:
-
-```text
-Manage Jenkins → System → E-mail Notification
-```
-
-SMTP settings:
-
-```text
-SMTP Server: smtp.gmail.com
-Port: 587
-TLS: Enabled
-Authentication: Enabled
-```
-
-A Google App Password is used instead of the normal Gmail password.
-
----
-
-# Smoke Tests
-
-After deployment, Jenkins automatically tests:
+After deployment, Jenkins validates:
 
 - Frontend availability
-- User registration endpoint
-- User login endpoint
+- Backend authentication endpoints
+- User registration
+- User login
+- Basic API availability
 
 Smoke test URLs:
 
@@ -383,50 +344,29 @@ http://192.168.56.101:3000/auth/register
 http://192.168.56.101:3000/auth/login
 ```
 
-The backend root route is not used as a required health check because it can return:
-
-```text
-404 Not Found
-```
-
-That behavior is expected.
-
 ---
 
-# Manual Ansible Commands
+## Useful Commands
 
-## Test VM connectivity
+Check Ansible connectivity:
 
 ```bash
 ansible -i ansible/inventory.ini all -m ping
 ```
 
-Expected result:
-
-```text
-app-vm | SUCCESS
-db-vm | SUCCESS
-```
-
----
-
-## Check Docker on VMs
+Check Docker on VMs:
 
 ```bash
 ansible -i ansible/inventory.ini all -m shell -a "docker ps"
 ```
 
----
-
-## Check VM IPs
+Check VM IPs:
 
 ```bash
 ansible -i ansible/inventory.ini all -m shell -a "hostname -I"
 ```
 
----
-
-## Manual deployment
+Manual deployment:
 
 ```bash
 ansible-playbook -i ansible/inventory.ini ansible/playbook.yml \
@@ -440,140 +380,9 @@ ansible-playbook -i ansible/inventory.ini ansible/playbook.yml \
 
 ---
 
-# Useful Docker Commands
+## Export and Handoff Files
 
-## View running containers
-
-```bash
-docker ps
-```
-
----
-
-## View all containers
-
-```bash
-docker ps -a
-```
-
----
-
-## View Jenkins logs
-
-```bash
-docker logs jenkins
-```
-
----
-
-## View Jenkins logs live
-
-```bash
-docker logs -f jenkins
-```
-
----
-
-## Start Jenkins
-
-```bash
-docker start jenkins
-```
-
----
-
-## Restart Jenkins
-
-```bash
-docker restart jenkins
-```
-
----
-
-## Fix Jenkins Docker socket permission
-
-After reboot, Jenkins may lose permission to access Docker.
-
-Run:
-
-```bash
-docker exec -u root -it jenkins bash
-chmod 666 /var/run/docker.sock
-exit
-```
-
-Verify:
-
-```bash
-docker exec -it jenkins docker ps
-```
-
----
-
-# SSH Configuration
-
-SSH is used by Jenkins and Ansible to deploy to the VMs.
-
-VM access examples:
-
-```bash
-ssh ruben@192.168.56.102
-ssh ruben@192.168.56.101
-```
-
-Password:
-
-```text
-12345
-```
-
----
-
-# SSH Host Key Fix
-
-If Jenkins or Ansible shows:
-
-```text
-Host key verification failed
-```
-
-Enter the Jenkins container:
-
-```bash
-docker exec -it jenkins bash
-```
-
-Remove old host keys:
-
-```bash
-ssh-keygen -R 192.168.56.101
-ssh-keygen -R 192.168.56.102
-```
-
-Reconnect manually:
-
-```bash
-ssh ruben@192.168.56.101
-ssh ruben@192.168.56.102
-```
-
-Answer:
-
-```text
-yes
-```
-
-Exit:
-
-```bash
-exit
-```
-
----
-
-# Export and Handoff Files
-
-For another person to test the project, the exported package should include:
+For another person to test the project, export:
 
 ```text
 billing-app-vm.ova
@@ -581,72 +390,9 @@ billing-db-vm.ova
 JenkinsWSL.tar
 ```
 
-The GitHub repository should also be updated with:
-
-- latest Jenkinsfile
-- latest Ansible inventory
-- latest Ansible playbook
-- updated README.md
-- updated guide.md
-
 ---
 
-# Importing the Project on Another Computer
-
-## Import JenkinsWSL
-
-PowerShell:
-
-```powershell
-wsl --import JenkinsWSL C:\WSL\JenkinsWSL .\JenkinsWSL.tar
-```
-
-Open it:
-
-```powershell
-wsl -d JenkinsWSL
-```
-
----
-
-## Import VirtualBox VMs
-
-Open Oracle VirtualBox:
-
-```text
-File → Import Appliance
-```
-
-Import:
-
-```text
-billing-app-vm.ova
-billing-db-vm.ova
-```
-
----
-
-# Expected Pipeline Flow
-
-```text
-GitHub Checkout
-   ↓
-Build backend Docker image
-   ↓
-Build frontend Docker image
-   ↓
-Push images to Docker Hub
-   ↓
-Deploy with Ansible
-   ↓
-Run smoke tests
-   ↓
-Send email notification
-```
-
----
-
-# Final Architecture
+## Final Architecture
 
 ```text
 GitHub Repository
@@ -655,7 +401,7 @@ Jenkins Pipeline
    ↓
 Docker Build
    ↓
-Docker Hub
+Docker Hub Push
    ↓
 Ansible Deployment
    ↓
@@ -669,27 +415,7 @@ Email Notifications
 
 ---
 
-# Current Status
-
-Implemented and functional:
-
-- Dockerized application
-- Docker Hub integration
-- Jenkins CI/CD pipeline
-- Multi-VM deployment
-- Ansible automation
-- PostgreSQL deployment
-- Backend deployment
-- Frontend deployment
-- Smoke testing
-- Email notifications
-- SSH-based VM deployment
-- Exportable VirtualBox VM infrastructure
-- Exportable JenkinsWSL environment
-
----
-
-# Final Working Configuration Summary
+## Final Working Configuration
 
 | Component | Final Value |
 |---|---|
@@ -708,9 +434,9 @@ Implemented and functional:
 
 ---
 
-# Final Notes
+## Final Note
 
-The most important network rule is:
+The most important rule is:
 
 ```text
 Use Host-only IPs for Jenkins and Ansible.
@@ -723,5 +449,3 @@ Therefore:
 Jenkins/Ansible → 192.168.56.101 and 192.168.56.102
 Backend → PostgreSQL → 10.0.2.4
 ```
-
-This is the final working version of the DevOps infrastructure.
