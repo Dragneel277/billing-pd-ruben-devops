@@ -38,7 +38,25 @@ router.get('/', async (req, res) => {
       `SELECT * FROM expenses WHERE ${conditions.join(' AND ')} ORDER BY created_at DESC`,
       params
     )
-    return res.json(result.rows)
+const updatedRows = result.rows.map(expense => {
+  const today = new Date()
+  const dueDate = expense.due_date ? new Date(expense.due_date) : null
+
+  if (
+    expense.status === 'pending' &&
+    dueDate &&
+    dueDate < today
+  ) {
+    return {
+      ...expense,
+      status: 'overdue'
+    }
+  }
+
+  return expense
+})
+
+return res.json(updatedRows)
   } catch {
     return res.status(500).json({ error: 'Internal server error' })
   }
