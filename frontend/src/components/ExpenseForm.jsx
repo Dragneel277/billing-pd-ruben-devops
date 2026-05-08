@@ -12,7 +12,7 @@ const empty = {
 }
 
 export default function ExpenseForm({ onCreated }) {
-  const [form, setForm]   = useState(empty)
+  const [form, setForm] = useState(empty)
   const [error, setError] = useState('')
 
   const handleSubmit = async (e) => {
@@ -20,11 +20,15 @@ export default function ExpenseForm({ onCreated }) {
     setError('')
 
     try {
-      await api.post('/expenses', { ...form, amount: parseFloat(form.amount) })
+      await api.post('/expenses', {
+        ...form,
+        amount: parseFloat(form.amount)
+      })
+
       setForm(empty)
       onCreated()
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to create expense')
+      setError(err.response?.data?.error || 'Failed to create bill')
     }
   }
 
@@ -36,12 +40,19 @@ export default function ExpenseForm({ onCreated }) {
       value={form[key]}
       onChange={(e) => setForm({ ...form, [key]: e.target.value })}
       required={key === 'title' || key === 'amount'}
+      step={type === 'number' ? '0.01' : undefined}
+      min={type === 'number' ? '0' : undefined}
     />
   )
 
   return (
     <div style={styles.card}>
-      <h3 style={{ marginTop: 0 }}>New Bill</h3>
+      <div style={styles.header}>
+        <div>
+          <h3 style={styles.title}>New Bill</h3>
+          <p style={styles.subtitle}>Register a new expense or invoice.</p>
+        </div>
+      </div>
 
       {error && <p style={styles.error}>{error}</p>}
 
@@ -77,16 +88,59 @@ export default function ExpenseForm({ onCreated }) {
           <option value="cancelled">Cancelled</option>
         </select>
 
-        <button style={styles.button} type="submit">Add</button>
+        <button style={styles.button} type="submit">
+          Add Bill
+        </button>
       </form>
     </div>
   )
 }
 
 const styles = {
-  card:   { background: '#fff', padding: '1rem', borderRadius: '8px', marginBottom: '1rem', boxShadow: '0 1px 4px rgba(0,0,0,0.1)' },
-  row:    { display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' },
-  input:  { padding: '0.4rem', borderRadius: '4px', border: '1px solid #ccc', minWidth: '120px', flex: 1 },
-  button: { padding: '0.4rem 1rem', background: '#1677ff', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' },
-  error:  { color: 'red' }
+  card: {
+    background: '#fff',
+    padding: '1.2rem',
+    borderRadius: '14px',
+    marginBottom: '1rem',
+    boxShadow: '0 4px 12px rgba(15,23,42,0.08)'
+  },
+  header: {
+    marginBottom: '1rem'
+  },
+  title: {
+    margin: 0
+  },
+  subtitle: {
+    margin: '0.25rem 0 0',
+    color: '#64748b',
+    fontSize: '0.9rem'
+  },
+  row: {
+    display: 'flex',
+    gap: '0.6rem',
+    flexWrap: 'wrap',
+    alignItems: 'center'
+  },
+  input: {
+    padding: '0.55rem',
+    borderRadius: '8px',
+    border: '1px solid #cbd5e1',
+    minWidth: '140px',
+    flex: 1
+  },
+  button: {
+    padding: '0.6rem 1rem',
+    background: '#2563eb',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontWeight: 'bold'
+  },
+  error: {
+    color: '#b91c1c',
+    background: '#fee2e2',
+    padding: '0.75rem',
+    borderRadius: '8px'
+  }
 }

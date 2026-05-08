@@ -6,14 +6,18 @@ export default function ExpenseFilters({ filters, onChange }) {
       <strong>Filters:</strong>
 
       <input
-        style={styles.input}
+        style={{ ...styles.input, minWidth: '260px' }}
         type="text"
         placeholder="Search title, entity or description"
         value={filters.search}
         onChange={(e) => set('search', e.target.value)}
       />
 
-      <select style={styles.input} value={filters.status} onChange={(e) => set('status', e.target.value)}>
+      <select
+        style={styles.input}
+        value={filters.status}
+        onChange={(e) => set('status', e.target.value)}
+      >
         <option value="">All statuses</option>
         <option value="pending">Pending</option>
         <option value="paid">Paid</option>
@@ -21,7 +25,11 @@ export default function ExpenseFilters({ filters, onChange }) {
         <option value="cancelled">Cancelled</option>
       </select>
 
-      <select style={styles.input} value={filters.category} onChange={(e) => set('category', e.target.value)}>
+      <select
+        style={styles.input}
+        value={filters.category}
+        onChange={(e) => set('category', e.target.value)}
+      >
         <option value="">All categories</option>
         <option value="rent">Rent</option>
         <option value="utilities">Utilities</option>
@@ -33,10 +41,20 @@ export default function ExpenseFilters({ filters, onChange }) {
       </select>
 
       <label style={styles.label}>From</label>
-      <input style={styles.input} type="date" value={filters.from} onChange={(e) => set('from', e.target.value)} />
+      <input
+        style={styles.input}
+        type="date"
+        value={filters.from}
+        onChange={(e) => set('from', e.target.value)}
+      />
 
       <label style={styles.label}>To</label>
-      <input style={styles.input} type="date" value={filters.to} onChange={(e) => set('to', e.target.value)} />
+      <input
+        style={styles.input}
+        type="date"
+        value={filters.to}
+        onChange={(e) => set('to', e.target.value)}
+      />
 
       <button
         style={styles.clearBtn}
@@ -49,8 +67,33 @@ export default function ExpenseFilters({ filters, onChange }) {
 }
 
 const styles = {
-  card:     { background: '#fff', padding: '0.75rem 1rem', borderRadius: '8px', marginBottom: '1rem', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', boxShadow: '0 1px 4px rgba(0,0,0,0.1)' },
-  input:    { padding: '0.4rem', borderRadius: '4px', border: '1px solid #ccc' },
-  label:    { fontWeight: 'bold' },
-  clearBtn: { padding: '0.4rem 0.8rem', background: '#ff4d4f', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }
+  card: {
+    background: '#fff',
+    padding: '0.9rem 1rem',
+    borderRadius: '14px',
+    marginBottom: '1rem',
+    display: 'flex',
+    gap: '0.6rem',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    boxShadow: '0 4px 12px rgba(15,23,42,0.08)'
+  },
+  input: {
+    padding: '0.5rem',
+    borderRadius: '8px',
+    border: '1px solid #cbd5e1'
+  },
+  label: {
+    fontWeight: 'bold',
+    color: '#475569'
+  },
+  clearBtn: {
+    padding: '0.5rem 0.9rem',
+    background: '#ef4444',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontWeight: 'bold'
+  }
 }

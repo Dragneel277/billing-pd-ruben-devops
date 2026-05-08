@@ -8,6 +8,8 @@ import AnalyticsDashboard from '../components/AnalyticsDashboard'
 
 export default function Dashboard() {
   const [expenses, setExpenses] = useState([])
+  const [analyticsRefresh, setAnalyticsRefresh] = useState(0)
+
   const [filters, setFilters] = useState({
     status: '',
     category: '',
@@ -35,6 +37,11 @@ export default function Dashboard() {
   useEffect(() => {
     fetchExpenses()
   }, [fetchExpenses])
+
+  const refreshAll = async () => {
+    await fetchExpenses()
+    setAnalyticsRefresh(current => current + 1)
+  }
 
   const handleLogout = () => {
     localStorage.removeItem('token')
@@ -87,18 +94,41 @@ export default function Dashboard() {
         </header>
 
         <section style={styles.summary}>
-          <SummaryCard label="Pending" value={totalPending} count={expenses.filter(e => e.status === 'pending').length} color="#fa8c16" />
-          <SummaryCard label="Paid" value={totalPaid} count={expenses.filter(e => e.status === 'paid').length} color="#52c41a" />
-          <SummaryCard label="Overdue" value={totalOverdue} count={expenses.filter(e => e.status === 'overdue').length} color="#ff4d4f" />
-          <SummaryCard label="Cancelled" value={totalCancelled} count={expenses.filter(e => e.status === 'cancelled').length} color="#8c8c8c" />
+          <SummaryCard
+            label="Pending"
+            value={totalPending}
+            count={expenses.filter(e => e.status === 'pending').length}
+            color="#f97316"
+          />
+
+          <SummaryCard
+            label="Paid"
+            value={totalPaid}
+            count={expenses.filter(e => e.status === 'paid').length}
+            color="#16a34a"
+          />
+
+          <SummaryCard
+            label="Overdue"
+            value={totalOverdue}
+            count={expenses.filter(e => e.status === 'overdue').length}
+            color="#ef4444"
+          />
+
+          <SummaryCard
+            label="Cancelled"
+            value={totalCancelled}
+            count={expenses.filter(e => e.status === 'cancelled').length}
+            color="#64748b"
+          />
         </section>
 
-        <AnalyticsDashboard />
+        <AnalyticsDashboard refreshKey={analyticsRefresh} />
 
         <section style={styles.section}>
-          <ExpenseForm onCreated={fetchExpenses} />
+          <ExpenseForm onCreated={refreshAll} />
           <ExpenseFilters filters={filters} onChange={setFilters} />
-          <ExpenseList expenses={expenses} onRefresh={fetchExpenses} />
+          <ExpenseList expenses={expenses} onRefresh={refreshAll} />
         </section>
       </main>
     </div>
@@ -109,9 +139,11 @@ function SummaryCard({ label, value, count, color }) {
   return (
     <div style={{ ...styles.summaryCard, borderTop: `4px solid ${color}` }}>
       <span style={styles.summaryLabel}>{label}</span>
+
       <strong style={{ ...styles.summaryAmount, color }}>
         €{value.toFixed(2)}
       </strong>
+
       <small style={styles.summaryCount}>{count} bills</small>
     </div>
   )
@@ -148,7 +180,7 @@ const styles = {
   sidebarInfo: {
     background: 'rgba(255,255,255,0.08)',
     padding: '1rem',
-    borderRadius: '10px'
+    borderRadius: '12px'
   },
   userLabel: {
     display: 'block',
@@ -160,15 +192,15 @@ const styles = {
     background: '#ef4444',
     color: '#fff',
     border: 'none',
-    padding: '0.7rem 1rem',
-    borderRadius: '8px',
+    padding: '0.75rem 1rem',
+    borderRadius: '10px',
     cursor: 'pointer',
     fontWeight: 'bold'
   },
   main: {
     flex: 1,
     padding: '2rem',
-    maxWidth: '1400px',
+    maxWidth: '1500px',
     margin: '0 auto'
   },
   header: {
@@ -184,14 +216,14 @@ const styles = {
   },
   summary: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+    gridTemplateColumns: 'repeat(4, minmax(180px, 1fr))',
     gap: '1rem',
     marginBottom: '1.5rem'
   },
   summaryCard: {
     background: '#fff',
     padding: '1rem',
-    borderRadius: '12px',
+    borderRadius: '14px',
     boxShadow: '0 4px 12px rgba(15,23,42,0.08)',
     display: 'flex',
     flexDirection: 'column',

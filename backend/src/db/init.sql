@@ -24,10 +24,10 @@ ALTER TABLE expenses
 ADD COLUMN IF NOT EXISTS category VARCHAR(50) NOT NULL DEFAULT 'other';
 
 ALTER TABLE expenses
-ALTER COLUMN status TYPE VARCHAR(20);
+DROP CONSTRAINT IF EXISTS expenses_status_check;
 
 ALTER TABLE expenses
-DROP CONSTRAINT IF EXISTS expenses_status_check;
+ALTER COLUMN status TYPE VARCHAR(20);
 
 ALTER TABLE expenses
 ADD CONSTRAINT expenses_status_check

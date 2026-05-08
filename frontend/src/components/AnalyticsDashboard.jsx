@@ -1,11 +1,21 @@
 import { useEffect, useState } from 'react'
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, LineChart, Line, CartesianGrid
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  LineChart,
+  Line,
+  CartesianGrid
 } from 'recharts'
 import api from '../api/client'
 
-export default function AnalyticsDashboard() {
+export default function AnalyticsDashboard({ refreshKey }) {
   const [monthly, setMonthly] = useState([])
   const [yearly, setYearly] = useState([])
   const [categories, setCategories] = useState([])
@@ -23,25 +33,49 @@ export default function AnalyticsDashboard() {
       ])
 
       setSummary(summaryRes.data)
-      setMonthly(monthlyRes.data.map(item => ({ ...item, total: Number(item.total) })))
-      setYearly(yearlyRes.data.map(item => ({ ...item, total: Number(item.total) })))
-      setCategories(categoriesRes.data.map(item => ({ ...item, total: Number(item.total) })))
-      setTopDays(topDaysRes.data.map(item => ({ ...item, total: Number(item.total), day: item.day?.slice(0, 10) })))
+
+      setMonthly(monthlyRes.data.map(item => ({
+        ...item,
+        total: Number(item.total)
+      })))
+
+      setYearly(yearlyRes.data.map(item => ({
+        ...item,
+        total: Number(item.total)
+      })))
+
+      setCategories(categoriesRes.data.map(item => ({
+        ...item,
+        total: Number(item.total),
+        count: Number(item.count)
+      })))
+
+      setTopDays(topDaysRes.data.map(item => ({
+        ...item,
+        total: Number(item.total),
+        count: Number(item.count),
+        day: item.day?.slice(0, 10)
+      })))
     }
 
     fetchAnalytics()
-  }, [])
+  }, [refreshKey])
 
   return (
     <div style={styles.wrapper}>
-      <h3 style={styles.title}>Analytics</h3>
+      <div style={styles.header}>
+        <div>
+          <h3 style={styles.title}>Analytics Dashboard</h3>
+          <p style={styles.subtitle}>Visual overview of spending, categories and payment behavior.</p>
+        </div>
+      </div>
 
       {summary && (
         <div style={styles.summaryGrid}>
-          <div style={styles.statCard}>Total<br /><strong>€{Number(summary.total).toFixed(2)}</strong></div>
-          <div style={styles.statCard}>Paid<br /><strong>€{Number(summary.paid).toFixed(2)}</strong></div>
-          <div style={styles.statCard}>Pending<br /><strong>€{Number(summary.pending).toFixed(2)}</strong></div>
-          <div style={styles.statCard}>Overdue<br /><strong>€{Number(summary.overdue).toFixed(2)}</strong></div>
+          <MiniStat label="Total" value={summary.total} />
+          <MiniStat label="Paid" value={summary.paid} />
+          <MiniStat label="Pending" value={summary.pending} />
+          <MiniStat label="Overdue" value={summary.overdue} />
         </div>
       )}
 
@@ -51,8 +85,8 @@ export default function AnalyticsDashboard() {
             <BarChart data={monthly}>
               <XAxis dataKey="month" />
               <YAxis />
-              <Tooltip />
-              <Bar dataKey="total" fill="#1677ff" />
+              <Tooltip formatter={(value) => `€${Number(value).toFixed(2)}`} />
+              <Bar dataKey="total" fill="#2563eb" radius={[8, 8, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -63,8 +97,8 @@ export default function AnalyticsDashboard() {
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="year" />
               <YAxis />
-              <Tooltip />
-              <Line type="monotone" dataKey="total" stroke="#52c41a" strokeWidth={3} />
+              <Tooltip formatter={(value) => `€${Number(value).toFixed(2)}`} />
+              <Line type="monotone" dataKey="total" stroke="#16a34a" strokeWidth={3} />
             </LineChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -72,12 +106,18 @@ export default function AnalyticsDashboard() {
         <ChartCard title="Spending by Category">
           <ResponsiveContainer width="100%" height={250}>
             <PieChart>
-              <Pie data={categories} dataKey="total" nameKey="category" outerRadius={90} label>
+              <Pie
+                data={categories}
+                dataKey="total"
+                nameKey="category"
+                outerRadius={90}
+                label
+              >
                 {categories.map((_, index) => (
                   <Cell key={index} fill={COLORS[index % COLORS.length]} />
                 ))}
               </Pie>
-              <Tooltip />
+              <Tooltip formatter={(value) => `€${Number(value).toFixed(2)}`} />
             </PieChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -87,12 +127,21 @@ export default function AnalyticsDashboard() {
             <BarChart data={topDays}>
               <XAxis dataKey="day" />
               <YAxis />
-              <Tooltip />
-              <Bar dataKey="total" fill="#fa8c16" />
+              <Tooltip formatter={(value) => `€${Number(value).toFixed(2)}`} />
+              <Bar dataKey="total" fill="#f97316" radius={[8, 8, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
       </div>
+    </div>
+  )
+}
+
+function MiniStat({ label, value }) {
+  return (
+    <div style={styles.statCard}>
+      <span style={styles.statLabel}>{label}</span>
+      <strong style={styles.statValue}>€{Number(value).toFixed(2)}</strong>
     </div>
   )
 }
@@ -106,14 +155,58 @@ function ChartCard({ title, children }) {
   )
 }
 
-const COLORS = ['#1677ff', '#52c41a', '#faad14', '#ff4d4f', '#722ed1', '#13c2c2', '#8c8c8c']
+const COLORS = ['#2563eb', '#16a34a', '#f59e0b', '#ef4444', '#7c3aed', '#0891b2', '#64748b']
 
 const styles = {
-  wrapper: { marginBottom: '1.5rem' },
-  title: { marginBottom: '1rem' },
-  summaryGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem', marginBottom: '1rem' },
-  statCard: { background: '#fff', padding: '1rem', borderRadius: '8px', boxShadow: '0 1px 4px rgba(0,0,0,0.1)', textAlign: 'center' },
-  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1rem' },
-  card: { background: '#fff', padding: '1rem', borderRadius: '8px', boxShadow: '0 1px 4px rgba(0,0,0,0.1)' },
-  cardTitle: { marginTop: 0 }
+  wrapper: {
+    marginBottom: '1.5rem'
+  },
+  header: {
+    marginBottom: '1rem'
+  },
+  title: {
+    margin: 0
+  },
+  subtitle: {
+    margin: '0.25rem 0 0',
+    color: '#64748b'
+  },
+  summaryGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+    gap: '1rem',
+    marginBottom: '1rem'
+  },
+  statCard: {
+    background: '#fff',
+    padding: '1rem',
+    borderRadius: '14px',
+    boxShadow: '0 4px 12px rgba(15,23,42,0.08)',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.35rem'
+  },
+  statLabel: {
+    color: '#64748b',
+    fontSize: '0.9rem'
+  },
+  statValue: {
+    fontSize: '1.3rem',
+    color: '#0f172a'
+  },
+  grid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))',
+    gap: '1rem'
+  },
+  card: {
+    background: '#fff',
+    padding: '1rem',
+    borderRadius: '14px',
+    boxShadow: '0 4px 12px rgba(15,23,42,0.08)'
+  },
+  cardTitle: {
+    marginTop: 0,
+    marginBottom: '1rem'
+  }
 }
