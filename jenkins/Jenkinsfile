@@ -5,15 +5,20 @@ pipeline {
         DOCKERHUB_USER = 'dragneel277'
 
         APP_PORT = '80'
+        BACKEND_PORT = '3000'
 
-        // IP interno entre VMs: backend -> database
+        // NAT Network IP: backend container -> PostgreSQL/db VM
         DB_HOST = '10.0.2.4'
 
-        // IP Host-only: Jenkins/WSL -> app VM
+        // Host-only IPs: Jenkins/Ansible -> VMs
         APP_VM_HOST = '192.168.56.101'
+        DB_VM_HOST = '192.168.56.102'
 
         BACKEND_URL = 'http://192.168.56.101:3000'
         FRONTEND_URL = 'http://192.168.56.101'
+
+        DB_NAME = 'billing_db'
+        DB_USER = 'billing_user'
     }
 
     stages {
@@ -60,12 +65,13 @@ pipeline {
                 ]) {
                     sh '''
                     ansible-playbook -i ansible/inventory.ini ansible/playbook.yml \
-                    --extra-vars image_tag=${BUILD_NUMBER} \
-                    --extra-vars dockerhub_user=${DOCKERHUB_USER} \
-                    --extra-vars db_password=${DB_PASS} \
-                    --extra-vars jwt_secret=${JWT_SEC} \
-                    --extra-vars app_port=${APP_PORT} \
-                    --extra-vars db_host=${DB_HOST}
+                      --extra-vars image_tag=${BUILD_NUMBER} \
+                      --extra-vars dockerhub_user=${DOCKERHUB_USER} \
+                      --extra-vars db_password=${DB_PASS} \
+                      --extra-vars jwt_secret=${JWT_SEC} \
+                      --extra-vars app_port=${APP_PORT} \
+                      --extra-vars backend_port=${BACKEND_PORT} \
+                      --extra-vars db_host=${DB_HOST}
                     '''
                 }
             }
@@ -88,6 +94,19 @@ pipeline {
                 curl --connect-timeout 10 --max-time 20 -f -X POST ${BACKEND_URL}/auth/login \
                   -H "Content-Type: application/json" \
                   -d "{\\"name\\":\\"${TEST_USER}\\",\\"password\\":\\"123456\\"}"
+                '''
+            }
+        }
+
+        stage('Cleanup Smoke Test Data') {
+            steps {
+                sh '''
+                TEST_USER="ci_test_${BUILD_NUMBER}"
+
+                echo "Cleaning smoke test user from database..."
+
+                ssh -o StrictHostKeyChecking=no ruben@${DB_VM_HOST} \
+                  "docker exec billing-db psql -U ${DB_USER} -d ${DB_NAME} -c \\"DELETE FROM expenses WHERE user_id IN (SELECT id FROM users WHERE name='${TEST_USER}'); DELETE FROM users WHERE name='${TEST_USER}';\\"" || true
                 '''
             }
         }
