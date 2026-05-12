@@ -17,6 +17,7 @@
     database_user: "{{ db_user | default('billing_user') }}"
     database_password: "{{ db_password | default('billing_pass') }}"
     database_port: "{{ db_port | default('5432') }}"
+    app_dir: "{{ deploy_dir | default('/opt/billing') }}"
 
   tasks:
     - name: Install Docker and Python dependencies
@@ -33,7 +34,25 @@
         state: present
         extra_args: --break-system-packages
 
-    - name: Run PostgreSQL container
+    - name: Ensure Docker service is running
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Create application directory
+      file:
+        path: "{{ app_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Copy database init.sql to DB VM
+      copy:
+        src: ../backend/src/db/init.sql
+        dest: "{{ app_dir }}/init.sql"
+        mode: "0644"
+
+    - name: Run PostgreSQL container with persistent volume
       community.docker.docker_container:
         name: billing-db
         image: postgres:16-alpine
@@ -44,39 +63,21 @@
           POSTGRES_DB: "{{ database_name | string }}"
           POSTGRES_USER: "{{ database_user | string }}"
           POSTGRES_PASSWORD: "{{ database_password | string }}"
+        volumes:
+          - "billing_pgdata:/var/lib/postgresql/data"
         published_ports:
           - "{{ database_port | string }}:5432"
 
     - name: Wait for PostgreSQL to be ready
       command: docker exec billing-db pg_isready -U {{ database_user }} -d {{ database_name }}
       register: pg_ready
-      retries: 15
+      retries: 20
       delay: 3
       until: pg_ready.rc == 0
       changed_when: false
 
-    - name: Ensure database schema exists
-      command: docker exec -i billing-db psql -U {{ database_user }} -d {{ database_name }}
-      args:
-        stdin: |
-          CREATE TABLE IF NOT EXISTS users (
-              id SERIAL PRIMARY KEY,
-              name VARCHAR(255) UNIQUE NOT NULL,
-              password_hash VARCHAR(255) NOT NULL
-          );
-
-          CREATE TABLE IF NOT EXISTS expenses (
-              id SERIAL PRIMARY KEY,
-              user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-              title VARCHAR(255) NOT NULL,
-              amount NUMERIC(10,2) NOT NULL,
-              entity VARCHAR(255),
-              description TEXT,
-              due_date DATE,
-              status VARCHAR(50) DEFAULT 'pending',
-              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-          );
+    - name: Apply database schema from backend init.sql
+      shell: docker exec -i billing-db psql -U {{ database_user }} -d {{ database_name }} < {{ app_dir }}/init.sql
       changed_when: false
 
 
@@ -113,6 +114,12 @@
         state: present
         extra_args: --break-system-packages
 
+    - name: Ensure Docker service is running
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
     - name: Pull backend image from Docker Hub
       community.docker.docker_image:
         name: "{{ backend_image_user }}/billing-backend:{{ backend_image_tag }}"
@@ -138,21 +145,15 @@
         published_ports:
           - "{{ backend_container_port | string }}:{{ backend_container_port | string }}"
 
-    - name: Wait for backend to respond
+    - name: Wait for backend health endpoint to respond
       uri:
-        url: "http://localhost:{{ backend_container_port }}/auth/login"
-        method: POST
-        body_format: json
-        body:
-          name: "healthcheck"
-          password: "healthcheck"
-        status_code:
-          - 401
-          - 500
+        url: "http://localhost:{{ backend_container_port }}/health"
+        method: GET
+        status_code: 200
       register: backend_health
-      retries: 10
+      retries: 15
       delay: 3
-      until: backend_health.status in [401, 500]
+      until: backend_health.status == 200
 
 
 # -----------------------------------------------------------------------------
@@ -165,7 +166,7 @@
   vars:
     frontend_image_user: "{{ dockerhub_user | default('dragneel277') }}"
     frontend_image_tag: "{{ image_tag | default('latest') }}"
-    frontend_port: "{{ app_port | default('3001') }}"
+    frontend_port: "{{ app_port | default('80') }}"
     frontend_backend_port: "{{ backend_port | default('3000') }}"
     backend_host_name: "{{ groups['backend_servers'][0] }}"
 
@@ -183,6 +184,12 @@
         name: docker
         state: present
         extra_args: --break-system-packages
+
+    - name: Ensure Docker service is running
+      service:
+        name: docker
+        state: started
+        enabled: yes
 
     - name: Pull frontend image from Docker Hub
       community.docker.docker_image:
@@ -209,7 +216,7 @@
         method: GET
         status_code: 200
       register: frontend_health
-      retries: 10
+      retries: 15
       delay: 3
       until: frontend_health.status == 200
 
