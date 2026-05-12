@@ -74,12 +74,13 @@ The final working network uses two adapters per VM:
 
 ## Purpose of each network
 
-| Purpose | Correct IP |
+| Purpose | Correct IP / Value |
 |---|---|
 | Jenkins/Ansible to app VM | 192.168.56.101 |
 | Jenkins/Ansible to db VM | 192.168.56.102 |
 | Backend container to PostgreSQL/db VM | 10.0.2.4 |
 | App VM internal NAT address | 10.0.2.3 |
+| Frontend/backend Docker network | billing-net |
 
 Important:
 
@@ -95,6 +96,63 @@ The backend database host must use:
 10.0.2.4
 ```
 
+The public backend API must be accessed through Nginx:
+
+```text
+http://192.168.56.101/api
+```
+
+---
+
+# FINAL NETWORK ISOLATION
+
+The final deployment uses an internal Docker network on `billing-app-vm`:
+
+```text
+billing-net
+```
+
+The frontend and backend containers are connected to this network:
+
+```text
+billing-frontend
+billing-backend
+```
+
+Final container exposure on `billing-app-vm`:
+
+```text
+billing-frontend   0.0.0.0:80->80/tcp
+billing-backend    3000/tcp
+```
+
+This means:
+
+- Only the frontend is exposed externally on port `80`
+- The backend is no longer exposed externally on port `3000`
+- Nginx proxies `/api/*` requests to `billing-backend:3000`
+- The backend connects to PostgreSQL on the DB VM through `10.0.2.4:5432`
+
+Final flow:
+
+```text
+Browser/Jenkins
+   ↓
+http://192.168.56.101
+   ↓
+billing-frontend / Nginx
+   ↓
+Docker network: billing-net
+   ↓
+billing-backend:3000
+   ↓
+NAT Network
+   ↓
+billing-db-vm:10.0.2.4:5432
+   ↓
+billing-db / PostgreSQL
+```
+
 ---
 
 # FINAL WORKING URLS
@@ -105,10 +163,16 @@ Frontend:
 http://192.168.56.101/login
 ```
 
-Backend API:
+Backend API through Nginx:
 
 ```text
-http://192.168.56.101:3000
+http://192.168.56.101/api
+```
+
+Backend health endpoint:
+
+```text
+http://192.168.56.101/api/health
 ```
 
 Jenkins:
@@ -116,6 +180,14 @@ Jenkins:
 ```text
 http://localhost:8080
 ```
+
+Direct backend access is intentionally disabled:
+
+```text
+http://192.168.56.101:3000
+```
+
+A connection refused or timeout on port `3000` is expected.
 
 ---
 
@@ -412,6 +484,17 @@ app-vm ansible_host=192.168.56.101 ansible_user=ruben
 
 [frontend_servers]
 app-vm ansible_host=192.168.56.101 ansible_user=ruben
+
+[all:vars]
+app_port=80
+backend_port=3000
+db_port=5432
+db_name=billing_db
+db_user=billing_user
+db_host=10.0.2.4
+db_bind_host=10.0.2.4
+docker_network_name=billing-net
+ansible_python_interpreter=/usr/bin/python3
 ```
 
 Do not use `10.0.2.x` in Ansible inventory.
@@ -490,6 +573,7 @@ Build images
 Push to Docker Hub
 Deploy via Ansible to VMs
 Smoke Test Multi-VM
+Cleanup Smoke Test Data
 Email Notification
 SUCCESS
 ```
@@ -508,25 +592,85 @@ If the login page appears, the frontend is working.
 
 ---
 
-# STEP 9 — Verify Backend
+# STEP 9 — Verify Backend Through Nginx
 
 Run:
 
 ```bash
-curl http://192.168.56.101:3000
+curl http://192.168.56.101/api/health
+```
+
+Expected:
+
+```json
+{"status":"ok","service":"billing-backend","database":"connected"}
+```
+
+---
+
+# STEP 10 — Verify Backend Is Private
+
+Run:
+
+```bash
+curl http://192.168.56.101:3000/health
 ```
 
 Expected:
 
 ```text
-404 Not Found
+Connection refused
 ```
 
-This is normal because `/` is not an API route.
+or timeout.
+
+This confirms the backend is no longer publicly exposed and is only reachable through Nginx `/api`.
 
 ---
 
-# STEP 10 — Verify SSH Connectivity
+# STEP 11 — Verify Docker Network on App VM
+
+Connect to app VM:
+
+```bash
+ssh ruben@192.168.56.101
+```
+
+Inspect the network:
+
+```bash
+docker network inspect billing-net
+```
+
+Expected containers inside `billing-net`:
+
+```text
+billing-frontend
+billing-backend
+```
+
+Expected app VM containers:
+
+```bash
+docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}"
+```
+
+Expected:
+
+```text
+billing-frontend   ...   0.0.0.0:80->80/tcp
+billing-backend    ...   3000/tcp
+```
+
+Exit:
+
+```bash
+exit
+```
+
+---
+
+# STEP 12 — Verify SSH Connectivity
 
 Test DB VM:
 
@@ -550,7 +694,7 @@ Password:
 
 ---
 
-# STEP 11 — Verify Ansible
+# STEP 13 — Verify Ansible
 
 Run inside the project folder:
 
@@ -567,7 +711,7 @@ db-vm | SUCCESS
 
 ---
 
-# STEP 12 — Run Manual Deployment
+# STEP 14 — Run Manual Deployment
 
 Run inside the project folder:
 
@@ -578,18 +722,10 @@ ansible-playbook -i ansible/inventory.ini ansible/playbook.yml \
 --extra-vars db_password=billing_pass \
 --extra-vars jwt_secret=mysecret123 \
 --extra-vars app_port=80 \
---extra-vars db_host=10.0.2.4
+--extra-vars backend_port=3000 \
+--extra-vars db_host=10.0.2.4 \
+--extra-vars db_bind_host=10.0.2.4
 ```
-
-Important:
-
-The database host must be:
-
-```text
-10.0.2.4
-```
-
-because the backend communicates with the database through the NAT Network.
 
 ---
 
@@ -692,24 +828,18 @@ The Jenkinsfile should use:
 ```groovy
 DB_HOST = '10.0.2.4'
 APP_VM_HOST = '192.168.56.101'
-BACKEND_URL = 'http://192.168.56.101:3000'
+DB_VM_HOST = '192.168.56.102'
 FRONTEND_URL = 'http://192.168.56.101'
+API_URL = 'http://192.168.56.101/api'
 ```
 
-Explanation:
+Smoke tests should use:
 
 ```text
-DB_HOST = 10.0.2.4
+http://192.168.56.101/api/health
+http://192.168.56.101/api/auth/register
+http://192.168.56.101/api/auth/login
 ```
-
-Used by backend to connect to PostgreSQL.
-
-```text
-FRONTEND_URL = 192.168.56.101
-BACKEND_URL = 192.168.56.101:3000
-```
-
-Used by Jenkins smoke tests.
 
 ---
 
@@ -793,10 +923,16 @@ Verify Jenkins:
 http://localhost:8080
 ```
 
-Verify backend API:
+Verify backend API through Nginx:
 
 ```bash
-curl http://192.168.56.101:3000
+curl http://192.168.56.101/api/health
+```
+
+Verify backend direct port is blocked:
+
+```bash
+curl http://192.168.56.101:3000/health
 ```
 
 Verify Ansible:
@@ -912,13 +1048,14 @@ exit
 
 ---
 
-## Backend not responding
+## Backend not responding through Nginx
 
 ```bash
 ssh ruben@192.168.56.101
 docker ps
 docker logs billing-backend
-docker restart billing-backend
+docker logs billing-frontend
+docker network inspect billing-net
 exit
 ```
 
@@ -949,10 +1086,10 @@ Docker Hub Push
    ↓
 Ansible Deployment
    ↓
-billing-db-vm → PostgreSQL
-billing-app-vm → Backend + Frontend
+billing-db-vm → PostgreSQL + billing_pgdata volume
+billing-app-vm → billing-net → billing-frontend + billing-backend
    ↓
-Smoke Tests
+Smoke Tests through Nginx /api
    ↓
 Email Notifications
 ```
@@ -971,6 +1108,10 @@ Before giving the project to another person, verify:
 - [ ] `ansible/inventory.ini` uses Host-only IPs
 - [ ] Jenkins opens at `http://localhost:8080`
 - [ ] Frontend opens at `http://192.168.56.101/login`
+- [ ] Backend health works at `http://192.168.56.101/api/health`
+- [ ] Direct backend port `3000` is not exposed
+- [ ] `billing-net` contains `billing-frontend` and `billing-backend`
+- [ ] DB only runs on `billing-db-vm`
 - [ ] Ansible ping works
 - [ ] Jenkins pipeline finishes with `SUCCESS`
 - [ ] Docker Hub images are visible
@@ -990,13 +1131,18 @@ The most important rule is:
 ```text
 Use Host-only IPs for Jenkins and Ansible.
 Use NAT IPs for internal VM-to-VM communication.
+Expose only frontend port 80.
+Keep backend private inside Docker network billing-net.
 ```
 
 Therefore:
 
 ```text
 Jenkins/Ansible → 192.168.56.101 and 192.168.56.102
-Backend → PostgreSQL → 10.0.2.4
+Browser/Jenkins → Frontend → http://192.168.56.101
+API access → http://192.168.56.101/api
+Frontend/Nginx → Backend → billing-backend:3000
+Backend → PostgreSQL → 10.0.2.4:5432
 ```
 
 This configuration is the final working version of the project.

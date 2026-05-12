@@ -10,27 +10,34 @@
 ## Índice
 
 1. [Visão geral do projeto](#1-visão-geral-do-projeto)
-2. [Arquitetura da aplicação](#2-arquitetura-da-aplicação)
-3. [Modelo de dados](#3-modelo-de-dados)
-4. [API REST](#4-api-rest)
-5. [Estrutura do repositório](#5-estrutura-do-repositório)
-6. [Docker e containerização](#6-docker-e-containerização)
-7. [Pipeline Jenkins](#7-pipeline-jenkins)
-8. [Deploy com Ansible](#8-deploy-com-ansible)
-9. [Variáveis de ambiente e secrets](#9-variáveis-de-ambiente-e-secrets)
-10. [Funcionalidades finais da aplicação](#10-funcionalidades-finais-da-aplicação)
-11. [Testes e validação](#11-testes-e-validação)
-12. [Checklist de entrega](#12-checklist-de-entrega)
+2. [Funcionalidades principais](#2-funcionalidades-principais)
+3. [Tecnologias utilizadas](#3-tecnologias-utilizadas)
+4. [Arquitetura da aplicação](#4-arquitetura-da-aplicação)
+5. [Infraestrutura de rede](#5-infraestrutura-de-rede)
+6. [Modelo de dados](#6-modelo-de-dados)
+7. [API REST](#7-api-rest)
+8. [Estrutura do repositório](#8-estrutura-do-repositório)
+9. [Docker e containerização](#9-docker-e-containerização)
+10. [Pipeline Jenkins](#10-pipeline-jenkins)
+11. [Deploy com Ansible](#11-deploy-com-ansible)
+12. [Variáveis de ambiente e secrets](#12-variáveis-de-ambiente-e-secrets)
+13. [Persistência da base de dados](#13-persistência-da-base-de-dados)
+14. [Isolamento de rede final](#14-isolamento-de-rede-final)
+15. [Testes e validação](#15-testes-e-validação)
+16. [Melhorias realizadas](#16-melhorias-realizadas)
+17. [Limitações e trabalho futuro](#17-limitações-e-trabalho-futuro)
+18. [Checklist de entrega](#18-checklist-de-entrega)
+19. [Conclusão](#19-conclusão)
 
 ---
 
 ## 1. Visão geral do projeto
 
-O Billing Tracker é uma aplicação web full-stack para gestão de despesas, faturas e pagamentos.
+O **Billing Tracker** é uma aplicação web full-stack para gestão de despesas, faturas e pagamentos pessoais.
 
 O objetivo principal do projeto é demonstrar um fluxo DevOps completo, desde o desenvolvimento da aplicação até à sua entrega automática em múltiplas máquinas virtuais.
 
-O sistema inclui:
+A solução final inclui:
 
 - Frontend React servido por Nginx
 - Backend Node.js/Express
@@ -39,12 +46,17 @@ O sistema inclui:
 - Pipeline Jenkins
 - Publicação de imagens no Docker Hub
 - Deploy automático com Ansible
-- Smoke tests
+- Smoke tests automáticos
 - Notificações por email
+- Persistência da base de dados
+- Isolamento de rede entre frontend e backend
+- Reverse proxy com Nginx
+
+O projeto foi desenvolvido num ambiente académico, usando VirtualBox, WSL e Jenkins local.
 
 ---
 
-## Funcionalidades principais
+## 2. Funcionalidades principais
 
 | Funcionalidade | Descrição |
 |---|---|
@@ -66,7 +78,7 @@ O sistema inclui:
 
 ---
 
-## Tecnologias
+## 3. Tecnologias utilizadas
 
 | Camada | Tecnologia |
 |---|---|
@@ -79,12 +91,13 @@ O sistema inclui:
 | Registo de imagens | Docker Hub |
 | Virtualização | Oracle VirtualBox |
 | Ambiente WSL | JenkinsWSL |
+| Controlo de versão | Git + GitHub |
 
 ---
 
-## 2. Arquitetura da aplicação
+## 4. Arquitetura da aplicação
 
-### Arquitetura final
+### Arquitetura geral
 
 ```text
 GitHub Repository
@@ -97,55 +110,93 @@ Docker Hub Push
    ↓
 Ansible Deployment
    ↓
-billing-db-vm → PostgreSQL
-billing-app-vm → Backend + Frontend
+billing-db-vm → PostgreSQL + billing_pgdata volume
+billing-app-vm → billing-net → billing-frontend + billing-backend
    ↓
-Smoke Tests
+Smoke Tests through Nginx /api
    ↓
 Email Notifications
 ```
 
+### Fluxo de utilização da aplicação
+
+```text
+User Browser
+   ↓
+http://192.168.56.101/login
+   ↓
+billing-frontend / Nginx
+   ↓
+/api/*
+   ↓
+billing-backend:3000
+   ↓
+PostgreSQL
+```
+
+### Fluxo CI/CD
+
+```text
+Developer push
+   ↓
+GitHub repository
+   ↓
+Jenkins Pipeline
+   ↓
+Checkout
+   ↓
+Build backend image
+   ↓
+Build frontend image
+   ↓
+Push images to Docker Hub
+   ↓
+Deploy with Ansible
+   ↓
+Run smoke tests
+   ↓
+Clean test user
+   ↓
+Send email notification
+```
+
 ---
 
-## Infraestrutura de rede
+## 5. Infraestrutura de rede
+
+O projeto usa duas máquinas virtuais Ubuntu no Oracle VirtualBox.
+
+Cada VM usa dois adaptadores de rede:
+
+1. NAT Network
+2. Host-only Adapter
 
 | Máquina | NAT Network IP | Host-only IP | Função |
 |---|---|---|---|
-| billing-app-vm | 10.0.2.3 | 192.168.56.101 | Backend + Frontend |
+| billing-app-vm | 10.0.2.3 | 192.168.56.101 | Frontend + Backend |
 | billing-db-vm | 10.0.2.4 | 192.168.56.102 | PostgreSQL |
 | Jenkins | localhost | localhost:8080 | CI/CD |
 
-Regra principal:
+### Regra principal de rede
 
 ```text
 Jenkins/Ansible usa Host-only IPs.
 Backend usa NAT IP para comunicar com PostgreSQL.
+Frontend e backend comunicam internamente através de Docker network.
 ```
 
 Assim:
 
 ```text
 Jenkins/Ansible → 192.168.56.101 / 192.168.56.102
-Backend → PostgreSQL → 10.0.2.4
+Browser → Frontend → 192.168.56.101:80
+Frontend/Nginx → Backend → billing-backend:3000
+Backend → PostgreSQL → 10.0.2.4:5432
 ```
 
 ---
 
-## Fluxo de autenticação
-
-```text
-1. POST /api/auth/login
-2. Backend valida password
-3. Backend devolve JWT
-4. Frontend guarda token no localStorage
-5. Frontend envia Authorization: Bearer <token>
-6. Middleware auth.js valida o token
-7. Rotas protegidas ficam acessíveis
-```
-
----
-
-## 3. Modelo de dados
+## 6. Modelo de dados
 
 ### Tabela `users`
 
@@ -157,8 +208,6 @@ CREATE TABLE IF NOT EXISTS users (
   created_at    TIMESTAMPTZ DEFAULT now()
 );
 ```
-
----
 
 ### Tabela `expenses`
 
@@ -197,11 +246,47 @@ CREATE INDEX IF NOT EXISTS idx_expenses_category ON expenses(user_id, category);
 CREATE INDEX IF NOT EXISTS idx_expenses_due_date ON expenses(user_id, due_date);
 ```
 
-O `init.sql` é idempotente e pode ser executado várias vezes. Isto é importante porque volumes PostgreSQL já existentes não recriam automaticamente a tabela.
+O ficheiro `backend/src/db/init.sql` é idempotente e pode ser executado várias vezes. Isto é importante porque volumes PostgreSQL já existentes não recriam automaticamente a tabela.
+
+A solução final evita divergência entre desenvolvimento local e deploy por Ansible, porque o Ansible copia e executa o mesmo `init.sql` usado pelo backend.
 
 ---
 
-## 4. API REST
+## 7. API REST
+
+Na arquitetura final, a API deve ser acedida através do Nginx:
+
+```text
+http://192.168.56.101/api
+```
+
+O backend direto em:
+
+```text
+http://192.168.56.101:3000
+```
+
+não está publicamente exposto.
+
+---
+
+### Health Check
+
+| Método | Endpoint | Descrição |
+|---|---|---|
+| GET | `/api/health` | Verifica backend e ligação à base de dados |
+
+Resposta esperada:
+
+```json
+{
+  "status": "ok",
+  "service": "billing-backend",
+  "database": "connected"
+}
+```
+
+---
 
 ### Auth
 
@@ -268,7 +353,7 @@ O `init.sql` é idempotente e pode ser executado várias vezes. Isto é importan
 
 ---
 
-## 5. Estrutura do repositório
+## 8. Estrutura do repositório
 
 ```text
 billing-pd-ruben-devops/
@@ -320,12 +405,12 @@ billing-pd-ruben-devops/
 ├── README.md
 ├── quickstart.md
 ├── guide.md
-└── billing-app-project.md
+└── billing_app.md
 ```
 
 ---
 
-## 6. Docker e containerização
+## 9. Docker e containerização
 
 O projeto usa Docker para empacotar:
 
@@ -362,9 +447,36 @@ COPY nginx.conf /etc/nginx/templates/default.conf.template
 EXPOSE 80
 ```
 
+### Nginx reverse proxy
+
+O frontend usa Nginx para servir a aplicação React e encaminhar os pedidos `/api/*` para o backend.
+
+Exemplo conceptual:
+
+```nginx
+location /api/ {
+    proxy_pass http://${BACKEND_HOST}:${BACKEND_PORT}/;
+}
+```
+
+Na versão final, as variáveis de ambiente do container frontend são:
+
+```text
+BACKEND_HOST=billing-backend
+BACKEND_PORT=3000
+```
+
+Assim, o Nginx encaminha:
+
+```text
+/api/health → billing-backend:3000/health
+/api/auth/login → billing-backend:3000/auth/login
+/api/expenses → billing-backend:3000/expenses
+```
+
 ---
 
-## 7. Pipeline Jenkins
+## 10. Pipeline Jenkins
 
 A pipeline está definida em:
 
@@ -372,7 +484,7 @@ A pipeline está definida em:
 jenkins/Jenkinsfile
 ```
 
-Fluxo:
+Fluxo final:
 
 ```text
 Checkout
@@ -380,6 +492,7 @@ Build images
 Push to Docker Hub
 Deploy via Ansible to VMs
 Smoke Test Multi-VM
+Cleanup Smoke Test Data
 Email Notification
 ```
 
@@ -388,15 +501,35 @@ A pipeline:
 1. Faz checkout do código no GitHub
 2. Constrói imagem backend
 3. Constrói imagem frontend
-4. Publica imagens no Docker Hub
+4. Publica imagens no Docker Hub com `BUILD_NUMBER` e `latest`
 5. Executa Ansible
 6. Faz deploy nas VMs
-7. Executa smoke tests
-8. Envia email de sucesso ou falha
+7. Executa smoke tests através de Nginx `/api`
+8. Remove o utilizador de teste criado pelo Jenkins
+9. Envia email de sucesso ou falha
+
+### Smoke tests finais
+
+Os smoke tests usam:
+
+```text
+http://192.168.56.101
+http://192.168.56.101/api/health
+http://192.168.56.101/api/auth/register
+http://192.168.56.101/api/auth/login
+```
+
+Isto valida:
+
+- disponibilidade do frontend
+- disponibilidade do backend através do reverse proxy
+- ligação do backend à base de dados
+- registo de utilizador
+- login de utilizador
 
 ---
 
-## 8. Deploy com Ansible
+## 11. Deploy com Ansible
 
 O Ansible usa:
 
@@ -405,7 +538,7 @@ ansible/inventory.ini
 ansible/playbook.yml
 ```
 
-Inventário final:
+### Inventário final
 
 ```ini
 [db_servers]
@@ -416,23 +549,42 @@ app-vm ansible_host=192.168.56.101 ansible_user=ruben
 
 [frontend_servers]
 app-vm ansible_host=192.168.56.101 ansible_user=ruben
+
+[all:vars]
+app_port=80
+backend_port=3000
+db_port=5432
+db_name=billing_db
+db_user=billing_user
+db_host=10.0.2.4
+db_bind_host=10.0.2.4
+docker_network_name=billing-net
+ansible_python_interpreter=/usr/bin/python3
 ```
 
-O backend recebe:
+### Responsabilidades do playbook
 
-```text
-DB_HOST=10.0.2.4
-```
+O playbook faz:
 
-porque a comunicação app-vm → db-vm usa NAT Network.
+- instalação/verificação de Docker
+- instalação do Python Docker SDK
+- criação do volume persistente da base de dados
+- deploy do container PostgreSQL na `billing-db-vm`
+- cópia e execução do `backend/src/db/init.sql`
+- remoção de containers antigos indevidos na `billing-app-vm`
+- criação da Docker network `billing-net`
+- deploy do backend na `billing-app-vm`
+- deploy do frontend na `billing-app-vm`
+- validação do frontend
+- validação do backend através de `/api/health`
 
 ---
 
-## 9. Variáveis de ambiente e secrets
+## 12. Variáveis de ambiente e secrets
 
 Nenhum secret deve ser commitado no GitHub.
 
-Jenkins Credentials:
+### Jenkins Credentials
 
 | ID | Tipo | Utilização |
 |---|---|---|
@@ -440,28 +592,115 @@ Jenkins Credentials:
 | db-password | Secret text | Password PostgreSQL |
 | jwt-secret | Secret text | JWT Secret |
 
----
+### Variáveis principais
 
-## 10. Funcionalidades finais da aplicação
-
-A versão final inclui:
-
-- Login/Register
-- CRUD de bills
-- Categorias
-- Estados extendedidos
-- Deteção automática de overdue
-- Filtros
-- Search
-- Dashboard analítico
-- Modal de edição
-- Gráficos
+| Variável | Valor final | Uso |
+|---|---|---|
+| `DB_HOST` | `10.0.2.4` | Backend liga à DB VM |
+| `DB_PORT` | `5432` | Porta PostgreSQL |
+| `DB_NAME` | `billing_db` | Nome da base de dados |
+| `DB_USER` | `billing_user` | Utilizador PostgreSQL |
+| `PORT` | `3000` | Porta interna do backend |
+| `BACKEND_HOST` | `billing-backend` | Nginx fala com backend via Docker DNS |
+| `BACKEND_PORT` | `3000` | Porta interna do backend |
+| `JWT_SECRET` | Jenkins credential | Assinatura de tokens JWT |
 
 ---
 
-## 11. Testes e validação
+## 13. Persistência da base de dados
 
-Testes manuais finais:
+A base de dados usa um volume Docker nomeado:
+
+```text
+billing_pgdata:/var/lib/postgresql/data
+```
+
+Isto garante que os dados permanecem mesmo quando:
+
+- o container PostgreSQL é recriado
+- o Ansible volta a executar o deploy
+- a pipeline Jenkins é executada novamente
+
+Este ponto corrige um problema importante: sem volume, a base de dados poderia ser reinicializada a cada deploy.
+
+### Validação realizada
+
+Foi criado um registo na aplicação, executada a pipeline novamente e confirmado que o registo continuava presente depois do redeploy.
+
+---
+
+## 14. Isolamento de rede final
+
+A versão final melhora a arquitetura inicial criando uma Docker network interna no `billing-app-vm`:
+
+```text
+billing-net
+```
+
+Containers ligados a esta rede:
+
+```text
+billing-frontend
+billing-backend
+```
+
+Estado final esperado no `billing-app-vm`:
+
+```text
+billing-frontend   0.0.0.0:80->80/tcp
+billing-backend    3000/tcp
+```
+
+Isto significa que:
+
+- a porta `80` do frontend está exposta
+- a porta `3000` do backend não está exposta publicamente
+- o backend só é acessível internamente pelo frontend/Nginx
+- o browser e o Jenkins acedem à API através de `/api`
+
+### Testes de isolamento
+
+API através do Nginx:
+
+```bash
+curl http://192.168.56.101/api/health
+```
+
+Resultado esperado:
+
+```json
+{"status":"ok","service":"billing-backend","database":"connected"}
+```
+
+Acesso direto ao backend:
+
+```bash
+curl http://192.168.56.101:3000/health
+```
+
+Resultado esperado:
+
+```text
+Connection refused
+```
+
+ou timeout.
+
+### Justificação técnica
+
+O Docker network funciona apenas dentro do mesmo host. Como o frontend e backend estão na mesma VM, ambos podem partilhar a rede `billing-net`.
+
+A base de dados está noutra VM, por isso não participa nesta Docker network. A comunicação backend → PostgreSQL é feita pela NAT Network usando:
+
+```text
+10.0.2.4:5432
+```
+
+---
+
+## 15. Testes e validação
+
+### Testes manuais finais
 
 ```text
 1. Login
@@ -478,15 +717,77 @@ Testes manuais finais:
 12. Eliminar teste
 ```
 
-Smoke tests automáticos:
+### Testes de infraestrutura
 
-- Frontend disponível
-- Register endpoint
-- Login endpoint
+```bash
+ansible -i ansible/inventory.ini all -m ping
+```
+
+```bash
+ansible -i ansible/inventory.ini all -m shell -a "docker ps"
+```
+
+```bash
+curl http://192.168.56.101/api/health
+```
+
+```bash
+curl http://192.168.56.101:3000/health
+```
+
+### Validações esperadas
+
+| Teste | Resultado esperado |
+|---|---|
+| Pipeline Jenkins | SUCCESS |
+| Frontend | Abre em `http://192.168.56.101/login` |
+| Health endpoint | Responde em `/api/health` |
+| Porta backend direta | Recusada ou timeout |
+| Docker network | `billing-net` contém frontend e backend |
+| Database persistence | Dados continuam após redeploy |
+| Smoke test cleanup | Utilizadores `ci_test_*` são removidos |
+| Email notification | Email recebido após pipeline |
 
 ---
 
-## 12. Checklist de entrega
+## 16. Melhorias realizadas
+
+Durante a fase final foram corrigidos e melhorados vários pontos:
+
+| Problema / melhoria | Solução aplicada |
+|---|---|
+| Base de dados podia perder dados após deploy | Adicionado volume persistente `billing_pgdata` |
+| Schema do Ansible estava incompleto | Ansible passou a executar `backend/src/db/init.sql` |
+| Coluna `category` em falta na DB | Corrigida através do schema final |
+| Health check podia aceitar erro 500 | Criado endpoint `/health` e validação por HTTP 200 |
+| Jenkins acumulava utilizadores de teste | Adicionado cleanup de `ci_test_<BUILD_NUMBER>` |
+| Portas inconsistentes entre Jenkins e inventory | Normalizado `app_port=80` |
+| Backend exposto publicamente em `3000` | Removido `published_ports` do backend |
+| Comunicação FE → BE por IP externo | Substituída por Docker DNS `billing-backend` |
+| Container DB antigo na app VM | Removido pelo playbook |
+| Arquitetura menos isolada | Criada Docker network interna `billing-net` |
+
+---
+
+## 17. Limitações e trabalho futuro
+
+Como este é um projeto académico em VirtualBox, algumas decisões são aceitáveis para laboratório mas seriam diferentes em produção.
+
+Possíveis melhorias futuras:
+
+- Ativar firewall/UFW na DB VM para permitir PostgreSQL apenas a partir do IP NAT da app VM (`10.0.2.3`)
+- Usar HTTPS em vez de HTTP
+- Usar cookies HttpOnly em vez de JWT no localStorage
+- Usar secrets manager em vez de secrets apenas no Jenkins
+- Adicionar testes unitários e de integração
+- Criar endpoint dedicado para métricas
+- Criar rollback automático para uma imagem anterior
+- Usar infraestrutura cloud com subnets privadas e security groups
+- Usar runners CI/CD isolados em vez de Docker socket direto
+
+---
+
+## 18. Checklist de entrega
 
 ### GitHub
 
@@ -498,7 +799,7 @@ Smoke tests automáticos:
 - [x] README.md
 - [x] quickstart.md
 - [x] guide.md
-- [x] billing-app-project.md
+- [x] billing_app.md
 
 ### Docker Hub
 
@@ -513,6 +814,16 @@ Smoke tests automáticos:
 - [x] Credenciais configuradas
 - [x] Email notifications
 - [x] Smoke tests
+- [x] Cleanup de dados de teste
+
+### Ansible
+
+- [x] Deploy da DB
+- [x] Deploy do backend
+- [x] Deploy do frontend
+- [x] Execução de `init.sql`
+- [x] Criação de `billing-net`
+- [x] Health checks
 
 ### Aplicação
 
@@ -525,6 +836,16 @@ Smoke tests automáticos:
 - [x] Analytics dashboard
 - [x] Automatic overdue
 
+### Infraestrutura
+
+- [x] VM da base de dados
+- [x] VM da aplicação
+- [x] Jenkins no WSL
+- [x] Docker Hub
+- [x] PostgreSQL persistente
+- [x] Backend privado dentro da Docker network
+- [x] Frontend exposto por Nginx
+
 ### Handoff
 
 - [x] billing-app-vm.ova
@@ -533,14 +854,27 @@ Smoke tests automáticos:
 
 ---
 
-## Conclusão
+## 19. Conclusão
 
 O projeto demonstra um fluxo DevOps completo aplicado a uma aplicação real.
 
 A solução final inclui:
 
 ```text
-GitHub → Jenkins → Docker Build → Docker Hub → Ansible → Multi-VM Deploy → Smoke Tests → Email
+GitHub → Jenkins → Docker Build → Docker Hub → Ansible → Multi-VM Deploy → Smoke Tests → Cleanup → Email
 ```
 
 Além da infraestrutura DevOps, a aplicação final possui funcionalidades reais de gestão de despesas, edição, filtros, categorias, estados e analytics.
+
+A arquitetura final também foi melhorada para demonstrar boas práticas de deployment:
+
+- frontend exposto através de Nginx
+- backend privado numa Docker network interna
+- base de dados separada noutra VM
+- persistência da base de dados com volume Docker
+- smoke tests automáticos
+- health checks reais
+- limpeza de dados de teste
+- deploy automatizado e reproduzível com Ansible
+
+Esta configuração representa a versão final funcional e demonstrável do projeto.

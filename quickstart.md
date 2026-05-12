@@ -170,6 +170,7 @@ Build images
 Push to Docker Hub
 Deploy via Ansible to VMs
 Smoke Test Multi-VM
+Cleanup Smoke Test Data
 Email Notification
 SUCCESS
 ```
@@ -184,10 +185,16 @@ Frontend:
 http://192.168.56.101/login
 ```
 
-Backend API:
+Backend API through Nginx:
 
 ```text
-http://192.168.56.101:3000
+http://192.168.56.101/api
+```
+
+Backend health endpoint:
+
+```text
+http://192.168.56.101/api/health
 ```
 
 Jenkins:
@@ -195,6 +202,16 @@ Jenkins:
 ```text
 http://localhost:8080
 ```
+
+Important:
+
+The backend direct port is no longer publicly exposed:
+
+```text
+http://192.168.56.101:3000
+```
+
+A connection refused or timeout on port `3000` is expected in the final version.
 
 ---
 
@@ -273,6 +290,47 @@ Check VM IPs:
 ansible -i ansible/inventory.ini all -m shell -a "hostname -I"
 ```
 
+Check backend through Nginx:
+
+```bash
+curl http://192.168.56.101/api/health
+```
+
+Expected:
+
+```json
+{"status":"ok","service":"billing-backend","database":"connected"}
+```
+
+Check that backend is private:
+
+```bash
+curl http://192.168.56.101:3000/health
+```
+
+Expected:
+
+```text
+Connection refused
+```
+
+or timeout.
+
+Check internal Docker network on app VM:
+
+```bash
+ssh ruben@192.168.56.101
+docker network inspect billing-net
+exit
+```
+
+Expected containers inside `billing-net`:
+
+```text
+billing-frontend
+billing-backend
+```
+
 ---
 
 # 10. If SSH Host Key Fails
@@ -315,18 +373,24 @@ VM password:
 
 # Final Network Values
 
-| Purpose | IP |
+| Purpose | IP / Value |
 |---|---|
 | App VM Host-only | 192.168.56.101 |
 | DB VM Host-only | 192.168.56.102 |
 | App VM NAT | 10.0.2.3 |
 | DB VM NAT | 10.0.2.4 |
+| Internal Docker network | billing-net |
+| Backend API public access | http://192.168.56.101/api |
+| Backend direct port | Not publicly exposed |
+| Frontend public access | http://192.168.56.101/login |
 
 Important rule:
 
 ```text
 Jenkins/Ansible uses Host-only IPs.
 Backend uses DB NAT IP 10.0.2.4.
+Frontend and backend communicate internally through billing-net.
+Only frontend port 80 is exposed externally.
 ```
 
 ---
@@ -374,4 +438,16 @@ Run:
 
 ```text
 billing-pipeline → Build Now
+```
+
+After Jenkins passes, open:
+
+```text
+http://192.168.56.101/login
+```
+
+And test:
+
+```bash
+curl http://192.168.56.101/api/health
 ```
