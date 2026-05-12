@@ -17,6 +17,7 @@
     database_user: "{{ db_user | default('billing_user') }}"
     database_password: "{{ db_password | default('billing_pass') }}"
     database_port: "{{ db_port | default('5432') }}"
+    database_bind_host: "{{ db_bind_host | default('10.0.2.4') }}"
     app_dir: "{{ deploy_dir | default('/opt/billing') }}"
 
   tasks:
@@ -66,7 +67,7 @@
         volumes:
           - "billing_pgdata:/var/lib/postgresql/data"
         published_ports:
-          - "{{ database_port | string }}:5432"
+          - "{{ database_bind_host | string }}:{{ database_port | string }}:5432"
 
     - name: Wait for PostgreSQL to be ready
       command: docker exec billing-db pg_isready -U {{ database_user }} -d {{ database_name }}
@@ -79,6 +80,22 @@
     - name: Apply database schema from backend init.sql
       shell: docker exec -i billing-db psql -U {{ database_user }} -d {{ database_name }} < {{ app_dir }}/init.sql
       changed_when: false
+
+
+# -----------------------------------------------------------------------------
+# Play 1.5 — Cleanup old database container from App VM
+# -----------------------------------------------------------------------------
+- name: Remove stale database container from app VM
+  hosts: backend_servers
+  become: yes
+
+  tasks:
+    - name: Ensure old billing-db container does not exist on app VM
+      community.docker.docker_container:
+        name: billing-db
+        state: absent
+        force_kill: yes
+      ignore_errors: yes
 
 
 # -----------------------------------------------------------------------------
@@ -98,6 +115,7 @@
     backend_db_user: "{{ db_user | default('billing_user') }}"
     backend_db_password: "{{ db_password | default('billing_pass') }}"
     backend_jwt_secret: "{{ jwt_secret | default('mysecret123') }}"
+    app_network_name: "{{ docker_network_name | default('billing-net') }}"
 
   tasks:
     - name: Install Docker and Python dependencies
@@ -120,19 +138,26 @@
         state: started
         enabled: yes
 
+    - name: Create internal Docker network for frontend and backend
+      community.docker.docker_network:
+        name: "{{ app_network_name }}"
+        state: present
+
     - name: Pull backend image from Docker Hub
       community.docker.docker_image:
         name: "{{ backend_image_user }}/billing-backend:{{ backend_image_tag }}"
         source: pull
         force_source: yes
 
-    - name: Run backend container
+    - name: Run backend container without exposing port 3000 publicly
       community.docker.docker_container:
         name: billing-backend
         image: "{{ backend_image_user }}/billing-backend:{{ backend_image_tag }}"
         state: started
         restart_policy: unless-stopped
         recreate: yes
+        networks:
+          - name: "{{ app_network_name }}"
         env:
           PORT: "{{ backend_container_port | string }}"
           DB_HOST: "{{ backend_db_host | string }}"
@@ -142,18 +167,14 @@
           DB_PASSWORD: "{{ backend_db_password | string }}"
           JWT_SECRET: "{{ backend_jwt_secret | string }}"
           JWT_EXPIRES_IN: "24h"
-        published_ports:
-          - "{{ backend_container_port | string }}:{{ backend_container_port | string }}"
 
-    - name: Wait for backend health endpoint to respond
-      uri:
-        url: "http://localhost:{{ backend_container_port }}/health"
-        method: GET
-        status_code: 200
+    - name: Wait for backend health endpoint inside backend container
+      command: docker exec billing-backend wget -qO- http://localhost:{{ backend_container_port }}/health
       register: backend_health
       retries: 15
       delay: 3
-      until: backend_health.status == 200
+      until: backend_health.rc == 0
+      changed_when: false
 
 
 # -----------------------------------------------------------------------------
@@ -168,7 +189,7 @@
     frontend_image_tag: "{{ image_tag | default('latest') }}"
     frontend_port: "{{ app_port | default('80') }}"
     frontend_backend_port: "{{ backend_port | default('3000') }}"
-    backend_host_name: "{{ groups['backend_servers'][0] }}"
+    app_network_name: "{{ docker_network_name | default('billing-net') }}"
 
   tasks:
     - name: Install Docker and Python dependencies
@@ -191,21 +212,28 @@
         state: started
         enabled: yes
 
+    - name: Create internal Docker network for frontend and backend
+      community.docker.docker_network:
+        name: "{{ app_network_name }}"
+        state: present
+
     - name: Pull frontend image from Docker Hub
       community.docker.docker_image:
         name: "{{ frontend_image_user }}/billing-frontend:{{ frontend_image_tag }}"
         source: pull
         force_source: yes
 
-    - name: Run frontend container
+    - name: Run frontend container on internal network
       community.docker.docker_container:
         name: billing-frontend
         image: "{{ frontend_image_user }}/billing-frontend:{{ frontend_image_tag }}"
         state: started
         restart_policy: unless-stopped
         recreate: yes
+        networks:
+          - name: "{{ app_network_name }}"
         env:
-          BACKEND_HOST: "{{ hostvars[backend_host_name].ansible_host }}"
+          BACKEND_HOST: "billing-backend"
           BACKEND_PORT: "{{ frontend_backend_port | string }}"
         published_ports:
           - "{{ frontend_port | string }}:80"
@@ -219,6 +247,16 @@
       retries: 15
       delay: 3
       until: frontend_health.status == 200
+
+    - name: Wait for backend health through frontend reverse proxy
+      uri:
+        url: "http://localhost:{{ frontend_port }}/api/health"
+        method: GET
+        status_code: 200
+      register: proxied_backend_health
+      retries: 15
+      delay: 3
+      until: proxied_backend_health.status == 200
 
     - name: Show running containers on app VM
       command: docker ps
