@@ -69,7 +69,7 @@ export default function Dashboard() {
     <div style={styles.layout}>
       <aside style={styles.sidebar}>
         <div>
-          <h2 style={styles.logo}>Billing Pro - Versão teste</h2>
+          <h2 style={styles.logo}>Billing Pro</h2>
           <p style={styles.sidebarText}>DevOps Billing Manager</p>
         </div>
 
